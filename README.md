@@ -72,6 +72,17 @@ mini-shirasu のファームの CAN 送受信はまだ実機で動かしたこ�
   ファームの既定は 0x100 / 0x101 / 0x200 / 0x201 で、これは `wheel0` と同じ
 - 基板のログ (defmt / RTT) を見られるようにしておく
 
+### WSL2 から使う場合
+
+- USB-CAN ボードは [usbipd-win](https://github.com/dorssel/usbipd-win) で WSL2 に渡す
+  (Windows 側で `usbipd list` -> `usbipd bind --busid <ID>` -> `usbipd attach --wsl --busid <ID> --auto-attach`)。
+  ボードがつなぎ直されると Windows 側に戻るので `--auto-attach` を付ける
+- `/dev/robomas` を作る udev ルールは、`/etc/wsl.conf` で `systemd=true` にしていないと動かない。
+  その場合は `/dev/ttyACM0` などのまま、`DEVICES=/dev/ttyACM0:/dev/robomas container/run.sh ...` でコンテナ内の名前を合わせる
+- コンテナエンジンは WSL2 のディストリビューションの中に入れた Podman (か Docker Engine) を使う。
+  Docker Desktop のコンテナは別の VM で動くので、ディストリビューションに渡したデバイスが見えない
+- ワークスペースは WSL2 側のファイルシステム (`~/` 以下) に置く。`/mnt/c` 以下だとビルドがかなり遅い
+
 ### 1. フレームを手で 1 つ送る
 
 ブリッジだけを立てて、`SetMode(無効)` を 1 フレーム送り、`Ack` が返るかを見る。
