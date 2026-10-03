@@ -42,8 +42,16 @@ ros2 launch oumuamua_bringup bringup.launch.py
 次は**例・仮の値のまま**なので、実機に合わせること。
 
 - `src/oumuamua_bringup/config/chassis_node.yaml`: 車輪配置・減速比
-- `src/oumuamua_bringup/config/mini_shirasu.yaml`: モータドライバの設定 (`settings.*`) と、
-  基板ごとの CAN ID (ファームの `config.rs` と合わせる。今は基板 i に 0x100+2i などを割り当てている)
+- `src/oumuamua_bringup/config/mini_shirasu.yaml`: 基板ごとの CAN ID。ファームの ID は
+  `minishirasu-firm/src/config.rs` のコンパイル時定数 (既定は全基板 0x100 / 0x101 / 0x200 / 0x201) なので、
+  4 枚つなぐなら基板ごとに書き換えて焼き、ここと合わせる。今は基板 i に 0x100+2i などを割り当てている
+
+モータドライバの設定 (`settings.*`) は mini-shirasu2 の `bench.rs` で実機が動いた値で、
+速度・位置は駆動軸 (ホイール) 基準。そのため chassis_node の `gear_ratio` は ±1、
+`max_wheel_speed` はドライバの `wmax` (20 rad/s) と揃えてある。
+
+mini-shirasu のファームには通信タイムアウトが無いので、PC やノードが落ちたときに止めるのは
+緊急停止スイッチに頼ることになる。
 sotoba_node の初期姿勢 (`start_x` など) は
 LiDAR の姿勢である点に注意 (base_link ではない)。
 

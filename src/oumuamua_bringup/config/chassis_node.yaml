@@ -1,7 +1,7 @@
 # chassis_node (omni_chassis) のパラメータ。この機体の値をここに書く。
 # 項目の意味は omni_chassis の README / config/chassis_node.yaml を参照。
 #
-# !!! 以下の車輪配置・減速比は例 (4輪オムニ X 配置) のまま。実機に合わせること !!!
+# !!! 以下の車輪配置は例 (4輪オムニ X 配置) のまま。実機に合わせること !!!
 chassis_node:
   ros__parameters:
     cmd_vel_topic: /cmd_vel
@@ -14,9 +14,13 @@ chassis_node:
       radius: [0.05, 0.05, 0.05, 0.05]
       # 各車輪の mini_shirasu_node (名前 wheel0..3) の目標
       topic: [/wheel0/target_velocity, /wheel1/target_velocity, /wheel2/target_velocity, /wheel3/target_velocity]
-      gear_ratio: [19.2, 19.2, 19.2, 19.2]
+      # mini-shirasu は encoder_cpr で駆動軸 (ホイール) 基準にしてあるので減速比は掛けない。
+      # 付け向きで正転が逆になる車輪は -1.0 にする
+      gear_ratio: [1.0, 1.0, 1.0, 1.0]
 
     cmd_timeout: 0.2
     limits:
-      max_wheel_speed: 0.0
+      # mini-shirasu の wmax と揃える。ドライバに車輪ごとに切り詰められると進む向きが歪むので、
+      # ここで全輪を同じ倍率で縮めておく
+      max_wheel_speed: 20.0
       max_wheel_accel: 0.0
