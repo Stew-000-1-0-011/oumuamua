@@ -1,0 +1,30 @@
+# chassis_node (omni_chassis) のパラメータ。この機体の値をここに書く。
+# 項目の意味は omni_chassis の README / config/chassis_node.yaml を参照。
+#
+# !!! 以下の車輪配置・減速比・モータ番号・単位は例 (4輪オムニ X 配置) のまま。実機に合わせること !!!
+chassis_node:
+  ros__parameters:
+    cmd_vel_topic: /cmd_vel
+    control_rate: 50.0
+    enable_on_start: true
+
+    wheels:
+      x: [0.2, -0.2, -0.2, 0.2]
+      y: [0.2, 0.2, -0.2, -0.2]
+      angle_deg: [135.0, 225.0, 315.0, 45.0]
+      radius: [0.05, 0.05, 0.05, 0.05]
+      motor: [1, 2, 3, 4]
+      gear_ratio: [19.2, 19.2, 19.2, 19.2]
+      c620: [true, true, true, true]
+
+    target_per_motor_rad_s: 1.0
+
+    motor:
+      velkp: 0.15
+      velki: 9.0
+      temp_limit: 50
+
+    cmd_timeout: 0.2
+    limits:
+      max_wheel_speed: 0.0
+      max_wheel_accel: 0.0

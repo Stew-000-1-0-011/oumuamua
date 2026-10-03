@@ -1,0 +1,13 @@
+# sotoba_node の上書き。sotoba_ros の config/sotoba_node.yaml の後に読む。
+# 自己位置を TF field -> base_link として流し、tracker_node がそれを引く。
+/**:
+  ros__parameters:
+    publish_tf: true
+    tf_parent_frame: field
+    tf_object: field
+    # base_link -> laser (static TF) を引いて合成するので、TFツリーが二重親にならない
+    tf_child_frame: base_link
+
+    # 注意: sotoba の start_x / start_y / start_yaw / lidar_height / lidar_upside_down は
+    # 「LiDAR の」初期姿勢と取付。base_link ではない。
+    # launch 引数 lidar_z / lidar_upside_down と食い違わないようにすること

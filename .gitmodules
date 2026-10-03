@@ -12,3 +12,7 @@
 	path = src/robomas_plugins
 	url = https://github.com/Stew-000-1-0-011/robomas_plugins.git
 	branch = claude/upbeat-goldberg-4juo8f
+[submodule "src/omni_chassis"]
+	path = src/omni_chassis
+	url = https://github.com/Stew-000-1-0-011/omni_chassis.git
+	branch = claude/upbeat-goldberg-4juo8f

@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>oumuamua_bringup</name>
+  <version>0.0.0</version>
+  <description>
+    oumuamua の起動一式。LiDAR (urg_node2)、自己位置 (sotoba_ros)、軌道追従 (holonomic_tracker)、足回り (omni_chassis)、モータ (robomas_plugins) をまとめて立てる。
+  </description>
+  <maintainer email="shnsk0204@gmail.com">Stew</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>rclcpp_components</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>urg_node2</exec_depend>
+  <exec_depend>sotoba_ros</exec_depend>
+  <exec_depend>holonomic_tracker</exec_depend>
+  <exec_depend>omni_chassis</exec_depend>
+  <exec_depend>robomas_plugins</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

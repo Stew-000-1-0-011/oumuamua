@@ -1,0 +1,7 @@
+# tracker_node の上書き。holonomic_tracker の config/tracker_node.yaml の後に読む。
+tracker_node:
+  ros__parameters:
+    field_frame: field
+    base_frame: base_link
+    pose_source: tf
+    cmd_vel_topic: /cmd_vel
