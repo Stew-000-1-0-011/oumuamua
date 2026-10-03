@@ -1,22 +1,29 @@
 # chassis_node (omni_chassis) のパラメータ。この機体の値をここに書く。
 # 項目の意味は omni_chassis の README / config/chassis_node.yaml を参照。
 #
-# !!! 以下の車輪配置は例 (4輪オムニ X 配置) のまま。実機に合わせること !!!
+# 3 輪オムニ。機体正面 (+x) は中心から車輪 0 を見た向き。
+# 車輪 0, 1, 2 は上から見て左回りに 120 度ずつ:
+#   車輪 0: 正面 (0 度)、車輪 1: 左後ろ (120 度)、車輪 2: 右後ろ (240 度)
+# 各車輪は、正転で機体を左回りに回す向き (位置の角度 + 90 度) に付いているとする。
+# 正転で右回りに回す向きに付いている車輪は gear_ratio を -1.0 にする。
+#
+# !!! L (中心から車輪の接地点まで) = 0.2 m と車輪半径 0.05 m は仮の値。実機に合わせること !!!
+#   x = L cos(角度), y = L sin(角度)
 chassis_node:
   ros__parameters:
     cmd_vel_topic: /cmd_vel
     control_rate: 50.0
 
     wheels:
-      x: [0.2, -0.2, -0.2, 0.2]
-      y: [0.2, 0.2, -0.2, -0.2]
-      angle_deg: [135.0, 225.0, 315.0, 45.0]
-      radius: [0.05, 0.05, 0.05, 0.05]
-      # 各車輪の mini_shirasu_node (名前 wheel0..3) の目標
-      topic: [/wheel0/target_velocity, /wheel1/target_velocity, /wheel2/target_velocity, /wheel3/target_velocity]
+      x: [0.2, -0.1, -0.1]                    # [m]
+      y: [0.0, 0.17320508, -0.17320508]       # [m]
+      angle_deg: [90.0, 210.0, 330.0]
+      radius: [0.05, 0.05, 0.05]              # [m]
+      # 各車輪の mini_shirasu_node (名前 wheel0..2) の目標
+      topic: [/wheel0/target_velocity, /wheel1/target_velocity, /wheel2/target_velocity]
       # mini-shirasu は encoder_cpr で駆動軸 (ホイール) 基準にしてあるので減速比は掛けない。
       # 付け向きで正転が逆になる車輪は -1.0 にする
-      gear_ratio: [1.0, 1.0, 1.0, 1.0]
+      gear_ratio: [1.0, 1.0, 1.0]
 
     cmd_timeout: 0.2
     limits:

@@ -1,14 +1,14 @@
 """oumuamua の起動一式。
 
 /scan (urg_node2) -> sotoba_node -> TF field -> base_link -> tracker_node -> /cmd_vel
--> chassis_node -> /wheel<i>/target_velocity -> mini_shirasu_node (wheel<i>)
+-> chassis_node -> /wheel<i>/target_velocity -> mini_shirasu_node (wheel<i>, i = 0..wheel_count-1)
 -> /robomas_can_tx -> robomas_bridge (USB-CAN) -> mini-shirasu
 
 tracker_node の目標 (/tracker_node/reference) を出すノードはここには含まない。
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
+from launch.actions import DeclareLaunchArgument, EmitEvent, OpaqueFunction, RegisterEventHandler
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessStart
 from launch.events import matches_action
@@ -126,17 +126,20 @@ def generate_launch_description():
         output='screen',
     )
 
-    # --- モータドライバ (mini-shirasu 4 枚。CAN は robomas_bridge 越し) ---
-    wheels = [
-        Node(
-            package='mini_shirasu_ros',
-            executable='mini_shirasu_node',
-            name=f'wheel{i}',
-            parameters=[LaunchConfiguration('mini_shirasu_params')],
-            output='screen',
-        )
-        for i in range(4)
-    ]
+    # --- モータドライバ (mini-shirasu を車輪ごとに 1 枚。CAN は robomas_bridge 越し) ---
+    def make_wheels(context):
+        count = int(LaunchConfiguration('wheel_count').perform(context))
+        return [
+            Node(
+                package='mini_shirasu_ros',
+                executable='mini_shirasu_node',
+                name=f'wheel{i}',
+                parameters=[LaunchConfiguration('mini_shirasu_params')],
+                output='screen',
+            )
+            for i in range(count)
+        ]
+    wheels = OpaqueFunction(function=make_wheels)
 
     # --- USB-CAN (robomas_plugins) ---
     robomas = ComposableNodeContainer(
@@ -182,8 +185,11 @@ def generate_launch_description():
             'chassis_params', default_value=config('oumuamua_bringup', 'chassis_node.yaml'),
             description='chassis_node のパラメータファイル'),
         DeclareLaunchArgument(
+            'wheel_count', default_value='3',
+            description='mini_shirasu_node (wheel0..) の数。chassis_node.yaml の車輪数と合わせる'),
+        DeclareLaunchArgument(
             'mini_shirasu_params', default_value=config('oumuamua_bringup', 'mini_shirasu.yaml'),
-            description='mini_shirasu_node (wheel0..3) のパラメータファイル'),
+            description='mini_shirasu_node (wheel0..) のパラメータファイル'),
         DeclareLaunchArgument('bridge', default_value='true', description='robomas_bridge (USB-CAN) を起動する'),
         DeclareLaunchArgument('rviz', default_value='false', description='RViz2 を起動する'),
         urg_configure,
@@ -193,7 +199,7 @@ def generate_launch_description():
         sotoba,
         tracker,
         chassis,
-        *wheels,
+        wheels,
         robomas,
         rviz_node,
     ])

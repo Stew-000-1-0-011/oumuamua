@@ -1,4 +1,4 @@
-# 足回りの mini-shirasu 4 枚 (mini_shirasu_node: wheel0..3) のパラメータ。
+# 足回りの mini-shirasu (mini_shirasu_node: wheel0..) のパラメータ。今は 3 輪オムニで wheel0..2 を使う。
 # 項目の意味は mini_shirasu_ros の README / config/mini_shirasu_node.yaml を参照。
 #
 # settings は mini-shirasu2 の bench.rs で実機 (RZ-735VA-8519、減速比 11.86) が動いた値で、
@@ -6,7 +6,7 @@
 # !!! can_id は各基板のファームの config.rs と合わせること。ここでは基板 i に
 #     target 0x100+2i, status 0x101+2i, command 0x200+2i, response 0x201+2i を割り当てている !!!
 
-# --- 4 枚共通 ---
+# --- 全基板共通 ---
 /**:
   ros__parameters:
     can_tx_topic: /robomas_can_tx
@@ -56,6 +56,3 @@ wheel1:
 wheel2:
   ros__parameters:
     can_id: {target: 0x104, status: 0x105, command: 0x204, response: 0x205}
-wheel3:
-  ros__parameters:
-    can_id: {target: 0x106, status: 0x107, command: 0x206, response: 0x207}

@@ -15,8 +15,8 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 ## つながり
 
 `/scan` (urg_node2) -> sotoba_node -> TF `field -> base_link` -> tracker_node -> `/cmd_vel`
--> chassis_node -> `/wheel<i>/target_velocity` -> mini_shirasu_node (`wheel0..3`)
--> `/robomas_can_tx` -> robomas_bridge (USB-CAN) -> mini-shirasu 4 枚
+-> chassis_node -> `/wheel<i>/target_velocity` -> mini_shirasu_node (`wheel0..2`)
+-> `/robomas_can_tx` -> robomas_bridge (USB-CAN) -> mini-shirasu 3 枚 (3 輪オムニ)
 
 tracker_node に目標 (`/tracker_node/reference`, `holonomic_tracker/msg/TrackingReference`)
 を出すノードはまだ無い。
@@ -35,16 +35,18 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `lidar_z` | `0.14` | 走査面の高さ [m]。sotoba_node の `lidar_height` にも渡す |
 | `lidar_upside_down` | `true` | 逆さ付けか。TF の roll と sotoba_node の同名パラメータに渡す |
 | `chassis_params` | `config/chassis_node.yaml` | chassis_node のパラメータ |
-| `mini_shirasu_params` | `config/mini_shirasu.yaml` | mini_shirasu_node (`wheel0..3`) のパラメータ |
+| `wheel_count` | `3` | mini_shirasu_node (`wheel0..`) の数。`chassis_node.yaml` の車輪数と合わせる |
+| `mini_shirasu_params` | `config/mini_shirasu.yaml` | mini_shirasu_node (`wheel0..`) のパラメータ |
 | `bridge` | `true` | robomas_bridge (USB-CAN) を起動する |
 | `rviz` | `false` | RViz2 を起動する |
 
 次は**例・仮の値のまま**なので、実機に合わせること。
 
-- `src/oumuamua_bringup/config/chassis_node.yaml`: 車輪配置・減速比
+- `src/oumuamua_bringup/config/chassis_node.yaml`: 3 輪オムニ (機体正面 = 中心から車輪 0 の向き、
+  車輪 0..2 は左回りに 120 度ずつ)。中心から接地点までの距離 0.2 m と車輪半径 0.05 m は仮の値
 - `src/oumuamua_bringup/config/mini_shirasu.yaml`: 基板ごとの CAN ID。ファームの ID は
   `minishirasu-firm/src/config.rs` のコンパイル時定数 (既定は全基板 0x100 / 0x101 / 0x200 / 0x201) なので、
-  4 枚つなぐなら基板ごとに書き換えて焼き、ここと合わせる。今は基板 i に 0x100+2i などを割り当てている
+  複数枚つなぐなら基板ごとに書き換えて焼き、ここと合わせる。今は基板 i に 0x100+2i などを割り当てている
 
 モータドライバの設定 (`settings.*`) は mini-shirasu2 の `bench.rs` で実機が動いた値で、
 速度・位置は駆動軸 (ホイール) 基準。そのため chassis_node の `gear_ratio` は ±1、
@@ -61,7 +63,7 @@ mini_shirasu_ros の模擬基板を流す:
 ```bash
 ros2 launch oumuamua_bringup bringup.launch.py lidar:=false bridge:=false
 ros2 run sotoba_ros fake_scan_publisher
-for i in 0 1 2 3; do
+for i in 0 1 2; do
   ros2 run mini_shirasu_ros fake_mini_shirasu --ros-args -r __node:=fake$i \
     -p can_id.target:=$((0x100+2*i)) -p can_id.status:=$((0x101+2*i)) \
     -p can_id.command:=$((0x200+2*i)) -p can_id.response:=$((0x201+2*i)) &
