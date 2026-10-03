@@ -1,0 +1,56 @@
+# 足回りの mini-shirasu 4 枚 (mini_shirasu_node: wheel0..3) のパラメータ。
+# 項目の意味は mini_shirasu_ros の README / config/mini_shirasu_node.yaml を参照。
+#
+# !!! settings はモータに合わせて決めること (今は mini_shirasu_ros の例の値) !!!
+# !!! can_id は各基板のファームの config.rs と合わせること。ここでは基板 i に
+#     target 0x100+2i, status 0x101+2i, command 0x200+2i, response 0x201+2i を割り当てている !!!
+
+# --- 4 枚共通 ---
+/**:
+  ros__parameters:
+    can_tx_topic: /robomas_can_tx
+    can_rx_topic: /robomas_can_rx
+    mode: velocity
+    enable_on_start: true
+    control_rate: 50.0
+    target_timeout: 0.2
+    command_timeout: 0.1
+    command_retries: 3
+    status_timeout: 0.5
+    settings:
+      vdcmax: 30.0
+      ibase: 10.0
+      wbase: 1000.0
+      ke: 0.01
+      ckp: 1.0
+      cki: 1000.0
+      dead_duty: 0.0
+      i_threshold: 0.1
+      duty_max: 0.95
+      vmax: 24.0
+      imax: 5.0
+      wkp: 0.01
+      wki: 0.1
+      wb: 1.0
+      wmax: 800.0
+      pkp: 10.0
+      pmax: 1000.0
+      accel_to_current: 0.0
+      encoder_cpr: 2048.0
+      w_filter_alpha: 0.5
+      encoder_reversed: 0.0
+      status_period_ms: 20.0
+
+# --- 基板ごと ---
+wheel0:
+  ros__parameters:
+    can_id: {target: 0x100, status: 0x101, command: 0x200, response: 0x201}
+wheel1:
+  ros__parameters:
+    can_id: {target: 0x102, status: 0x103, command: 0x202, response: 0x203}
+wheel2:
+  ros__parameters:
+    can_id: {target: 0x104, status: 0x105, command: 0x204, response: 0x205}
+wheel3:
+  ros__parameters:
+    can_id: {target: 0x106, status: 0x107, command: 0x206, response: 0x207}

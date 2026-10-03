@@ -7,14 +7,16 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 | `src/sotoba_ros` | sotoba の ICP による LiDAR 物体姿勢推定 |
 | `src/urg_node2` | 北陽 URG LiDAR ドライバ |
 | `src/holonomic_tracker` | 全方向移動ロボットの追従制御 |
-| `src/omni_chassis` | 足回りドライバ。`cmd_vel` を N 輪オムニの逆運動学で robomas のモータ目標にする |
-| `src/robomas_plugins` | RoboMaster モータ用ブリッジ (crs-kouhou/robomas_plugins のフォーク) |
+| `src/omni_chassis` | 足回りドライバ。`cmd_vel` を N 輪オムニの逆運動学で車輪ごとのモータ目標角速度にする |
+| `src/mini_shirasu_ros` | mini-shirasu (ブラシ付き DC モータドライバ) と CAN で話す(**submodule は未追加**。リポジトリができ次第追加する) |
+| `src/robomas_plugins` | USB-CAN ブリッジ (crs-kouhou/robomas_plugins のフォーク)。`robomas_can_tx` / `robomas_can_rx` だけを使う |
 | `src/oumuamua_bringup` | 上をまとめて起動する launch と、この機体のパラメータ |
 
 ## つながり
 
 `/scan` (urg_node2) -> sotoba_node -> TF `field -> base_link` -> tracker_node -> `/cmd_vel`
--> chassis_node -> `robomas_target<N>` -> robomas_bridge
+-> chassis_node -> `/wheel<i>/target_velocity` -> mini_shirasu_node (`wheel0..3`)
+-> `/robomas_can_tx` -> robomas_bridge (USB-CAN) -> mini-shirasu 4 枚
 
 tracker_node に目標 (`/tracker_node/reference`, `holonomic_tracker/msg/TrackingReference`)
 を出すノードはまだ無い。
@@ -33,18 +35,29 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `lidar_z` | `0.14` | 走査面の高さ [m]。sotoba_node の `lidar_height` にも渡す |
 | `lidar_upside_down` | `true` | 逆さ付けか。TF の roll と sotoba_node の同名パラメータに渡す |
 | `chassis_params` | `config/chassis_node.yaml` | chassis_node のパラメータ |
-| `bridge` | `true` | robomas_bridge を起動する |
+| `mini_shirasu_params` | `config/mini_shirasu.yaml` | mini_shirasu_node (`wheel0..3`) のパラメータ |
+| `bridge` | `true` | robomas_bridge (USB-CAN) を起動する |
 | `rviz` | `false` | RViz2 を起動する |
 
-`src/oumuamua_bringup/config/chassis_node.yaml` の車輪配置・減速比・モータ番号・単位は
-**例のまま**なので、実機に合わせること。sotoba_node の初期姿勢 (`start_x` など) は
+次は**例・仮の値のまま**なので、実機に合わせること。
+
+- `src/oumuamua_bringup/config/chassis_node.yaml`: 車輪配置・減速比
+- `src/oumuamua_bringup/config/mini_shirasu.yaml`: モータドライバの設定 (`settings.*`) と、
+  基板ごとの CAN ID (ファームの `config.rs` と合わせる。今は基板 i に 0x100+2i などを割り当てている)
+sotoba_node の初期姿勢 (`start_x` など) は
 LiDAR の姿勢である点に注意 (base_link ではない)。
 
-実機なしで流れを確かめるには、LiDAR とブリッジを切って sotoba_ros の合成スキャンを流す:
+実機なしで流れを確かめるには、LiDAR とブリッジを切って、sotoba_ros の合成スキャンと
+mini_shirasu_ros の模擬基板を流す:
 
 ```bash
 ros2 launch oumuamua_bringup bringup.launch.py lidar:=false bridge:=false
 ros2 run sotoba_ros fake_scan_publisher
+for i in 0 1 2 3; do
+  ros2 run mini_shirasu_ros fake_mini_shirasu --ros-args -r __node:=fake$i \
+    -p can_id.target:=$((0x100+2*i)) -p can_id.status:=$((0x101+2*i)) \
+    -p can_id.command:=$((0x200+2*i)) -p can_id.response:=$((0x201+2*i)) &
+done
 ```
 
 ## 取得

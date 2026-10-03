@@ -1,7 +1,8 @@
 """oumuamua の起動一式。
 
 /scan (urg_node2) -> sotoba_node -> TF field -> base_link -> tracker_node -> /cmd_vel
--> chassis_node -> robomas_target<N> -> robomas_bridge
+-> chassis_node -> /wheel<i>/target_velocity -> mini_shirasu_node (wheel<i>)
+-> /robomas_can_tx -> robomas_bridge (USB-CAN) -> mini-shirasu
 
 tracker_node の目標 (/tracker_node/reference) を出すノードはここには含まない。
 """
@@ -125,7 +126,19 @@ def generate_launch_description():
         output='screen',
     )
 
-    # --- モータ (robomas_plugins) ---
+    # --- モータドライバ (mini-shirasu 4 枚。CAN は robomas_bridge 越し) ---
+    wheels = [
+        Node(
+            package='mini_shirasu_ros',
+            executable='mini_shirasu_node',
+            name=f'wheel{i}',
+            parameters=[LaunchConfiguration('mini_shirasu_params')],
+            output='screen',
+        )
+        for i in range(4)
+    ]
+
+    # --- USB-CAN (robomas_plugins) ---
     robomas = ComposableNodeContainer(
         package='rclcpp_components',
         executable='component_container',
@@ -168,7 +181,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'chassis_params', default_value=config('oumuamua_bringup', 'chassis_node.yaml'),
             description='chassis_node のパラメータファイル'),
-        DeclareLaunchArgument('bridge', default_value='true', description='robomas_bridge を起動する'),
+        DeclareLaunchArgument(
+            'mini_shirasu_params', default_value=config('oumuamua_bringup', 'mini_shirasu.yaml'),
+            description='mini_shirasu_node (wheel0..3) のパラメータファイル'),
+        DeclareLaunchArgument('bridge', default_value='true', description='robomas_bridge (USB-CAN) を起動する'),
         DeclareLaunchArgument('rviz', default_value='false', description='RViz2 を起動する'),
         urg_configure,
         urg_activate,
@@ -177,6 +193,7 @@ def generate_launch_description():
         sotoba,
         tracker,
         chassis,
+        *wheels,
         robomas,
         rviz_node,
     ])
