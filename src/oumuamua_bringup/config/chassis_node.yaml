@@ -7,7 +7,7 @@
 # 各車輪は、正転で機体を左回りに回す向き (位置の角度 + 90 度) に付いているとする。
 # 正転で右回りに回す向きに付いている車輪は gear_ratio を -1.0 にする。
 #
-# !!! L (中心から車輪の接地点まで) = 0.2 m と車輪半径 0.05 m は仮の値。実機に合わせること !!!
+# L (中心から車輪までの水平距離) = 0.2 m、車輪半径 = 0.06 m。
 #   x = L cos(角度), y = L sin(角度)
 chassis_node:
   ros__parameters:
@@ -18,7 +18,7 @@ chassis_node:
       x: [0.2, -0.1, -0.1]                    # [m]
       y: [0.0, 0.17320508, -0.17320508]       # [m]
       angle_deg: [90.0, 210.0, 330.0]
-      radius: [0.05, 0.05, 0.05]              # [m]
+      radius: [0.06, 0.06, 0.06]              # [m]
       # 各車輪の mini_shirasu_node (名前 wheel0..2) の目標
       topic: [/wheel0/target_velocity, /wheel1/target_velocity, /wheel2/target_velocity]
       # mini-shirasu は encoder_cpr で駆動軸 (ホイール) 基準にしてあるので減速比は掛けない。

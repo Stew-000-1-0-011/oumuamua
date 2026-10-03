@@ -7,6 +7,7 @@
 #   OUMUAMUA_IMAGE    image tag (default: localhost/oumuamua:lyrical)
 #   EXTRA_CA_CERT     CA certificate of a TLS-intercepting proxy, used only during the build
 #   REBUILD=1         rebuild the image even if it exists
+#   DEVICES           devices to pass through (default: /dev/robomas, if it exists)
 set -euo pipefail
 
 if [ -n "${CONTAINER_ENGINE:-}" ]; then
@@ -32,9 +33,17 @@ if [ $# -eq 0 ]; then
   set -- bash
 fi
 
+# Serial devices to pass through (space separated). The robomas USB-CAN bridge is /dev/robomas
+# (udev rule in robomas_plugins); it is passed automatically when present.
+DEVICE_ARGS=()
+for dev in ${DEVICES:-/dev/robomas}; do
+  [ -e "$dev" ] && DEVICE_ARGS+=(--device "$dev")
+done
+
 # label=disable: let the bind mount work on SELinux hosts without relabeling the checkout.
 exec "$ENGINE" run --rm "${TTY_ARGS[@]}" \
   --net=host \
   --security-opt label=disable \
+  "${DEVICE_ARGS[@]}" \
   -v "$WS:/ws" \
   "$IMAGE" bash -ic '"$@"' _ "$@"

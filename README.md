@@ -43,7 +43,7 @@ ros2 launch oumuamua_bringup bringup.launch.py
 次は**例・仮の値のまま**なので、実機に合わせること。
 
 - `src/oumuamua_bringup/config/chassis_node.yaml`: 3 輪オムニ (機体正面 = 中心から車輪 0 の向き、
-  車輪 0..2 は左回りに 120 度ずつ)。中心から接地点までの距離 0.2 m と車輪半径 0.05 m は仮の値
+  車輪 0..2 は左回りに 120 度ずつ、中心から 0.2 m、半径 0.06 m)。各車輪の正転の向き (`gear_ratio` の符号) は未確認
 - `src/oumuamua_bringup/config/mini_shirasu.yaml`: 基板ごとの CAN ID。ファームの ID は
   `minishirasu-firm/src/config.rs` のコンパイル時定数 (既定は全基板 0x100 / 0x101 / 0x200 / 0x201) なので、
   複数枚つなぐなら基板ごとに書き換えて焼き、ここと合わせる。今は基板 i に 0x100+2i などを割り当てている
@@ -56,6 +56,52 @@ mini-shirasu のファームには通信タイムアウトが無いので、PC �
 緊急停止スイッチに頼ることになる。
 sotoba_node の初期姿勢 (`start_x` など) は
 LiDAR の姿勢である点に注意 (base_link ではない)。
+
+## CAN 通信のテスト (モータは回さない)
+
+mini-shirasu 1 枚と USB-CAN ブリッジ (robomas_plugins が話す Debug_CAN ボード) だけで、話せるかを確かめる。
+mini-shirasu のファームの CAN 送受信はまだ実機で動かしたことがないので、ここから始める。
+
+準備:
+
+- USB-CAN ボードの udev ルールを入れて `/dev/robomas` ができること
+  (`sudo cp src/robomas_plugins/udev/60-robomas.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger`)。
+  `container/run.sh` は `/dev/robomas` があればコンテナに渡す
+- CAN は 1Mbps。USB-CAN ボード側のビットレートを合わせる。終端抵抗も確認する
+- 基板のファームの CAN ID (`minishirasu-firm/src/config.rs`) と `config/mini_shirasu.yaml` の `wheel<board>` を合わせる。
+  ファームの既定は 0x100 / 0x101 / 0x200 / 0x201 で、これは `wheel0` と同じ
+- 基板のログ (defmt / RTT) を見られるようにしておく
+
+### 1. フレームを手で 1 つ送る
+
+ブリッジだけを立てて、`SetMode(無効)` を 1 フレーム送り、`Ack` が返るかを見る。
+
+```bash
+container/run.sh ros2 launch oumuamua_bringup can_test.launch.py node:=false
+# ブリッジのログに "negotiation success" が出るまで待つ。別の端末で:
+container/run.sh ros2 topic echo /robomas_can_rx
+# さらに別の端末で:
+container/run.sh ros2 topic pub --once /robomas_can_tx robomas_plugins/msg/Frame \
+  "{id: 0x200, dlc: 5, data: [0x02, 0x10, 0x02, 0x57, 0x00, 0, 0, 0]}"
+```
+
+`02 10 02 57 00` は `COBS(10 00 | CRC 57) + 00`、つまり `SetMode(0)`。うまくいけば
+`/robomas_can_rx` に `id: 513` (0x201)、`dlc: 5`、`data: [4, 48, 16, 137, 0, ...]` (`Ack(SetMode)`) が返る。
+
+- 何も返らず、基板のログにも何も出ない: ブリッジから基板まで届いていない (ビットレート、配線、終端、ID、ファームの受信)
+- 基板のログに `nack:` が出る: 届いているが中身が違う。その行を mini-shirasu2 側に渡す
+- 基板は受けているのに返らない: ファームの送信かブリッジの受信
+
+### 2. ノードで設定を送る
+
+```bash
+container/run.sh ros2 launch oumuamua_bringup can_test.launch.py board:=0
+```
+
+mini_shirasu_node が `SetMode(無効)` と全設定の `SetParam` を Ack を待ちながら送る。**有効化はしない**。
+ログに `configured (disabled)` が出て、`/wheel0/status` に Status が約 50Hz で届けばよい
+(`ros2 topic hz /wheel0/status`)。母線電圧 `vdc` が実測と合うことも見る。
+手でホイールを回すと `position` と `velocity` が動く (駆動軸基準。回転方向の符号もここで見ておく)。
 
 実機なしで流れを確かめるには、LiDAR とブリッジを切って、sotoba_ros の合成スキャンと
 mini_shirasu_ros の模擬基板を流す:
