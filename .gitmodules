@@ -4,3 +4,11 @@
 [submodule "src/urg_node2"]
 	path = src/urg_node2
 	url = https://github.com/Stew-000-1-0-011/urg_node2.git
+[submodule "src/holonomic_tracker"]
+	path = src/holonomic_tracker
+	url = https://github.com/Stew-000-1-0-011/holonomic_tracker.git
+	branch = claude/upbeat-goldberg-4juo8f
+[submodule "src/robomas_plugins"]
+	path = src/robomas_plugins
+	url = https://github.com/Stew-000-1-0-011/robomas_plugins.git
+	branch = claude/upbeat-goldberg-4juo8f
