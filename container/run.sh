@@ -38,7 +38,8 @@ fi
 # when present. Without the udev rule (e.g. WSL2 without systemd), use DEVICES=/dev/ttyACM0:/dev/robomas.
 DEVICE_ARGS=()
 for dev in ${DEVICES:-/dev/robomas}; do
-  [ -e "${dev%%:*}" ] && DEVICE_ARGS+=(--device "$dev")
+  # Resolve symlinks (/dev/robomas -> ttyACM1): podman passes the link target under its own name.
+  [ -e "${dev%%:*}" ] && DEVICE_ARGS+=(--device "$(readlink -f "${dev%%:*}"):${dev#*:}")
 done
 
 # label=disable: let the bind mount work on SELinux hosts without relabeling the checkout.
