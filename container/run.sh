@@ -22,7 +22,7 @@ WS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ "${REBUILD:-0}" = 1 ] || ! "$ENGINE" image inspect "$IMAGE" >/dev/null 2>&1; then
   BUILD_ARGS=()
   [ -n "${EXTRA_CA_CERT:-}" ] && BUILD_ARGS+=(--secret "id=extra_ca,src=$EXTRA_CA_CERT")
-  "$ENGINE" build "${BUILD_ARGS[@]}" -t "$IMAGE" -f "$WS/container/Containerfile" "$WS"
+  "$ENGINE" build --network=host "${BUILD_ARGS[@]}" -t "$IMAGE" -f "$WS/container/Containerfile" "$WS"
 fi
 
 TTY_ARGS=()
