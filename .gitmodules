@@ -16,3 +16,7 @@
 	path = src/omni_chassis
 	url = https://github.com/Stew-000-1-0-011/omni_chassis.git
 	branch = claude/upbeat-goldberg-4juo8f
+[submodule "src/mini_shirasu_ros"]
+	path = src/mini_shirasu_ros
+	url = https://github.com/Stew-000-1-0-011/mini_shirasu_ros.git
+	branch = claude/upbeat-goldberg-4juo8f

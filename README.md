@@ -8,7 +8,7 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 | `src/urg_node2` | 北陽 URG LiDAR ドライバ |
 | `src/holonomic_tracker` | 全方向移動ロボットの追従制御 |
 | `src/omni_chassis` | 足回りドライバ。`cmd_vel` を N 輪オムニの逆運動学で車輪ごとのモータ目標角速度にする |
-| `src/mini_shirasu_ros` | mini-shirasu (ブラシ付き DC モータドライバ) と CAN で話す(**submodule は未追加**。リポジトリができ次第追加する) |
+| `src/mini_shirasu_ros` | mini-shirasu (ブラシ付き DC モータドライバ) と CAN で話す |
 | `src/robomas_plugins` | USB-CAN ブリッジ (crs-kouhou/robomas_plugins のフォーク)。`robomas_can_tx` / `robomas_can_rx` だけを使う |
 | `src/oumuamua_bringup` | 上をまとめて起動する launch と、この機体のパラメータ |
 
