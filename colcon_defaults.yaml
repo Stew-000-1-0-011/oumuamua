@@ -3,7 +3,5 @@ build:
   cmake-args:
     - -DCMAKE_BUILD_TYPE=RelWithDebInfo
     - -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-    # Build every package as C++26, including ones that hard-code an older standard.
+    # Default standard for packages that leave CMAKE_CXX_STANDARD to the caller.
     - -DCMAKE_CXX_STANDARD=26
-    - -DOUMUAMUA_CXX_STANDARD=26
-    - -DCMAKE_PROJECT_INCLUDE=/ws/cmake/force_cxx_standard.cmake

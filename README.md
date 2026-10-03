@@ -17,28 +17,38 @@ git clone --recursive https://github.com/Stew-000-1-0-011/oumuamua.git
 git submodule update --init --recursive
 ```
 
-## ビルド (Docker / Podman)
+## ビルド (Podman / Docker)
 
 ホストに ROS 2 Lyrical が無くても、コンテナ内でビルドできる。
-イメージは `ros:lyrical` (GCC 15) に rosdep の依存と sotoba (+ Sophus 1.24.6) を入れたもの。
+`container/Containerfile` は `docker.io/library/ros:lyrical` (GCC 15) に
+rosdep の依存と sotoba (+ Sophus 1.24.6) を入れたもので、Podman/Buildah と Docker のどちらでもビルドできる。
 
 ```bash
-docker/run.sh colcon build          # 初回はイメージもビルドする
-docker/run.sh colcon test
-docker/run.sh                       # 対話シェル (/ws がこのリポジトリ)
-CONTAINER_ENGINE=podman docker/run.sh colcon build
+container/run.sh colcon build       # 初回はイメージもビルドする
+container/run.sh colcon test
+container/run.sh                    # 対話シェル (/ws がこのリポジトリ)
+CONTAINER_ENGINE=docker container/run.sh colcon build   # 既定は podman があれば podman
 ```
 
-依存 (`package.xml`) を変えたらイメージを作り直す:
-`docker build -t oumuamua:lyrical -f docker/Dockerfile .`
+依存 (`package.xml`) を変えたら `REBUILD=1 container/run.sh` でイメージを作り直す。
+
+### TLS を傍受するプロキシの内側でビルドする場合
+
+通常は不要。社内・学内プロキシが HTTPS を傍受していて `rosdep update` や
+`git clone` が証明書エラーになるときだけ、プロキシの CA 証明書を渡す:
+
+```bash
+EXTRA_CA_CERT=/path/to/proxy-ca.crt container/run.sh colcon build
+# 直接ビルドするなら
+podman build --secret id=extra_ca,src=/path/to/proxy-ca.crt -t localhost/oumuamua:lyrical -f container/Containerfile .
+```
+
+CA はビルド中の RUN でだけ使われ、イメージには残らない。
+プロキシが `127.0.0.1` など host 側にある場合は `podman build --network=host` も要る。
 
 ## C++ 規格
 
-ワークスペース全体を **C++26** でビルドする (`colcon_defaults.yaml`)。
-`CMAKE_CXX_STANDARD` を固定で書いているパッケージがあっても、
-`cmake/force_cxx_standard.cmake` を `CMAKE_PROJECT_INCLUDE` で差し込み、
-全ターゲットの `CXX_STANDARD` を `OUMUAMUA_CXX_STANDARD` (=26) に揃える。
-rosidl が生成する型サポートの C コードは対象外。
-
-コンテナ外で colcon を使う場合は `COLCON_DEFAULTS_FILE=$PWD/colcon_defaults.yaml` にし、
-`CMAKE_PROJECT_INCLUDE` のパスを書き換えること。
+`colcon_defaults.yaml` で `CMAKE_CXX_STANDARD=26` を既定として渡す。
+各パッケージが自分で規格を決めている場合はそちらが優先される
+(rosidl が生成するメッセージの型サポートは rosidl 自身の設定で C++20)。
+コンテナ外で colcon を使う場合は `COLCON_DEFAULTS_FILE=$PWD/colcon_defaults.yaml` にする。
