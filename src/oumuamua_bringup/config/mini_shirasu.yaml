@@ -4,7 +4,7 @@
 # settings は mini-shirasu2 の bench.rs で実機 (RZ-735VA-8519、減速比 11.86) が動いた値で、
 # 速度・位置は駆動軸 (ホイール) 基準。chassis_node の gear_ratio を ±1 にしているのはこのため。
 # !!! can_id は各基板のファームの config.rs と合わせること。ここでは基板 i に
-#     target 0x100+2i, status 0x101+2i, command 0x200+2i, response 0x201+2i を割り当てている !!!
+#     target 0x110+i, status 0x120+i, command 0x130+i, response 0x140+i を割り当てている !!!
 
 # --- 全基板共通 ---
 /**:
@@ -49,10 +49,10 @@
 # --- 基板ごと ---
 wheel0:
   ros__parameters:
-    can_id: {target: 0x100, status: 0x101, command: 0x200, response: 0x201}
+    can_id: {target: 0x110, status: 0x120, command: 0x130, response: 0x140}
 wheel1:
   ros__parameters:
-    can_id: {target: 0x102, status: 0x103, command: 0x202, response: 0x203}
+    can_id: {target: 0x111, status: 0x121, command: 0x131, response: 0x141}
 wheel2:
   ros__parameters:
-    can_id: {target: 0x104, status: 0x105, command: 0x204, response: 0x205}
+    can_id: {target: 0x112, status: 0x122, command: 0x132, response: 0x142}

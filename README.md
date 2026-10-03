@@ -45,8 +45,8 @@ ros2 launch oumuamua_bringup bringup.launch.py
 - `src/oumuamua_bringup/config/chassis_node.yaml`: 3 輪オムニ (機体正面 = 中心から車輪 0 の向き、
   車輪 0..2 は左回りに 120 度ずつ、中心から 0.2 m、半径 0.06 m)。各車輪の正転の向き (`gear_ratio` の符号) は未確認
 - `src/oumuamua_bringup/config/mini_shirasu.yaml`: 基板ごとの CAN ID。ファームの ID は
-  `minishirasu-firm/src/config.rs` のコンパイル時定数 (既定は全基板 0x100 / 0x101 / 0x200 / 0x201) なので、
-  複数枚つなぐなら基板ごとに書き換えて焼き、ここと合わせる。今は基板 i に 0x100+2i などを割り当てている
+  `minishirasu-firm/src/config.rs` のコンパイル時定数 なので、
+  複数枚つなぐなら基板ごとに書き換えて焼き、ここと合わせる。今は基板 i に 目標 0x110+i / 状態 0x120+i / コマンド 0x130+i / 応答 0x140+i を割り当てている
 
 モータドライバの設定 (`settings.*`) は mini-shirasu2 の `bench.rs` で実機が動いた値で、
 速度・位置は駆動軸 (ホイール) 基準。そのため chassis_node の `gear_ratio` は ±1、
@@ -69,7 +69,7 @@ mini-shirasu のファームの CAN 送受信はまだ実機で動かしたこ�
   `container/run.sh` は `/dev/robomas` があればコンテナに渡す
 - CAN は 1Mbps。USB-CAN ボード側のビットレートを合わせる。終端抵抗も確認する
 - 基板のファームの CAN ID (`minishirasu-firm/src/config.rs`) と `config/mini_shirasu.yaml` の `wheel<board>` を合わせる。
-  ファームの既定は 0x100 / 0x101 / 0x200 / 0x201 で、これは `wheel0` と同じ
+  基板 n のファームは 目標 0x11n / 状態 0x12n / コマンド 0x13n / 応答 0x14n で、`wheel<n>` と同じ
 - 基板のログ (defmt / RTT) を見られるようにしておく
 
 ### WSL2 から使う場合
@@ -93,11 +93,11 @@ container/run.sh ros2 launch oumuamua_bringup can_test.launch.py node:=false
 container/run.sh ros2 topic echo /robomas_can_rx
 # さらに別の端末で:
 container/run.sh ros2 topic pub --once /robomas_can_tx robomas_plugins/msg/Frame \
-  "{id: 0x200, dlc: 5, data: [0x02, 0x10, 0x02, 0x57, 0x00, 0, 0, 0]}"
+  "{id: 0x130, dlc: 5, data: [0x02, 0x10, 0x02, 0x57, 0x00, 0, 0, 0]}"
 ```
 
 `02 10 02 57 00` は `COBS(10 00 | CRC 57) + 00`、つまり `SetMode(0)`。うまくいけば
-`/robomas_can_rx` に `id: 513` (0x201)、`dlc: 5`、`data: [4, 48, 16, 137, 0, ...]` (`Ack(SetMode)`) が返る。
+`/robomas_can_rx` に `id: 320` (0x140)、`dlc: 5`、`data: [4, 48, 16, 137, 0, ...]` (`Ack(SetMode)`) が返る。
 
 - 何も返らず、基板のログにも何も出ない: ブリッジから基板まで届いていない (ビットレート、配線、終端、ID、ファームの受信)
 - 基板のログに `nack:` が出る: 届いているが中身が違う。その行を mini-shirasu2 側に渡す
@@ -122,8 +122,8 @@ ros2 launch oumuamua_bringup bringup.launch.py lidar:=false bridge:=false
 ros2 run sotoba_ros fake_scan_publisher
 for i in 0 1 2; do
   ros2 run mini_shirasu_ros fake_mini_shirasu --ros-args -r __node:=fake$i \
-    -p can_id.target:=$((0x100+2*i)) -p can_id.status:=$((0x101+2*i)) \
-    -p can_id.command:=$((0x200+2*i)) -p can_id.response:=$((0x201+2*i)) &
+    -p can_id.target:=$((0x110+i)) -p can_id.status:=$((0x120+i)) \
+    -p can_id.command:=$((0x130+i)) -p can_id.response:=$((0x140+i)) &
 done
 ```
 
