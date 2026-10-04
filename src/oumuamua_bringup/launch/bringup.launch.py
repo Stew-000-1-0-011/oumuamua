@@ -5,11 +5,14 @@
 -> /robomas_can_tx -> robomas_bridge (USB-CAN) -> mini-shirasu
 
 tracker_node の目標 (/tracker_node/reference) を出すノードはここには含まない。
+
+sim:=true なら、/cmd_vel から先 (足回り・モータドライバ・USB-CAN・LiDAR) の代わりに
+oumuamua_sim の robot_sim を立てる。robot_sim は /cmd_vel で動き、/scan を出す。
 """
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, EmitEvent, OpaqueFunction, RegisterEventHandler
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.event_handlers import OnProcessStart
 from launch.events import matches_action
 from launch.substitutions import (
@@ -34,6 +37,10 @@ def generate_launch_description():
     lidar_connection = LaunchConfiguration('lidar_connection')
     bridge = LaunchConfiguration('bridge')
     rviz = LaunchConfiguration('rviz')
+    sim = LaunchConfiguration('sim')
+    # 実機でだけ立てるもの
+    real = UnlessCondition(sim)
+    lidar_real = IfCondition(PythonExpression(["'", lidar, "' == 'true' and '", sim, "' != 'true'"]))
 
     # --- LiDAR (urg_node2 はライフサイクルノード。起動したら configure -> activate まで進める) ---
     urg = LifecycleNode(
@@ -46,7 +53,7 @@ def generate_launch_description():
             FindPackageShare('oumuamua_bringup'), 'config', ['urg_', lidar_connection, '.yaml'],
         ])],
         output='screen',
-        condition=IfCondition(lidar),
+        condition=lidar_real,
     )
     urg_configure = RegisterEventHandler(
         OnProcessStart(
@@ -56,7 +63,7 @@ def generate_launch_description():
                 transition_id=Transition.TRANSITION_CONFIGURE,
             ))],
         ),
-        condition=IfCondition(lidar),
+        condition=lidar_real,
     )
     urg_activate = RegisterEventHandler(
         OnStateTransition(
@@ -68,7 +75,7 @@ def generate_launch_description():
                 transition_id=Transition.TRANSITION_ACTIVATE,
             ))],
         ),
-        condition=IfCondition(lidar),
+        condition=lidar_real,
     )
 
     # --- base_link -> laser (LiDAR の取付)。逆さ付けなら x 軸まわりに 180 度 ---
@@ -124,10 +131,13 @@ def generate_launch_description():
         name='chassis_node',
         parameters=[LaunchConfiguration('chassis_params')],
         output='screen',
+        condition=real,
     )
 
     # --- モータドライバ (mini-shirasu を車輪ごとに 1 枚。CAN は robomas_bridge 越し) ---
     def make_wheels(context):
+        if sim.perform(context) == 'true':
+            return []
         count = int(LaunchConfiguration('wheel_count').perform(context))
         return [
             Node(
@@ -155,7 +165,29 @@ def generate_launch_description():
             ),
         ],
         output='screen',
-        condition=IfCondition(bridge),
+        condition=IfCondition(PythonExpression(["'", bridge, "' == 'true' and '", sim, "' != 'true'"])),
+    )
+
+    # --- シミュレータ (sim:=true) ---
+    # フィールドの寸法・初期姿勢・LiDAR の高さと上下は sotoba_node と同じ値を読ませる
+    robot_sim = Node(
+        package='oumuamua_sim',
+        executable='robot_sim',
+        name='robot_sim',
+        parameters=[
+            config('sotoba_ros', 'sotoba_node.yaml'),
+            config('oumuamua_bringup', 'sotoba_node.yaml'),
+            config('oumuamua_sim', 'robot_sim.yaml'),
+            {
+                'lidar_height': LaunchConfiguration('lidar_z'),
+                'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
+                'lidar_x': LaunchConfiguration('lidar_x'),
+                'lidar_y': LaunchConfiguration('lidar_y'),
+                'lidar_yaw': LaunchConfiguration('lidar_yaw'),
+            },
+        ],
+        output='screen',
+        condition=IfCondition(sim),
     )
 
     rviz_node = Node(
@@ -192,6 +224,9 @@ def generate_launch_description():
             description='mini_shirasu_node (wheel0..) のパラメータファイル'),
         DeclareLaunchArgument('bridge', default_value='true', description='robomas_bridge (USB-CAN) を起動する'),
         DeclareLaunchArgument('rviz', default_value='false', description='RViz2 を起動する'),
+        DeclareLaunchArgument(
+            'sim', default_value='false',
+            description='/cmd_vel から先を oumuamua_sim で模擬する (LiDAR・足回り・ドライバ・USB-CAN は立てない)'),
         urg_configure,
         urg_activate,
         urg,
@@ -201,5 +236,6 @@ def generate_launch_description():
         chassis,
         wheels,
         robomas,
+        robot_sim,
         rviz_node,
     ])

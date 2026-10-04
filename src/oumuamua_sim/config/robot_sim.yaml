@@ -1,0 +1,44 @@
+# robot_sim のパラメータ。
+# フィールドの寸法 (wall_height など) と初期姿勢 (start_*)、LiDAR の高さ・向き (lidar_height,
+# lidar_upside_down) は、sotoba_node と同じパラメータファイルを先に読ませて揃える
+# (oumuamua_bringup の bringup.launch.py sim:=true がそうしている)。
+robot_sim:
+  ros__parameters:
+    cmd_vel_topic: /cmd_vel
+    scan_topic: /scan
+    sim_rate: 200.0            # [Hz] 運動の積分の周期
+
+    # --- LiDAR の取付 (base_link -> laser)。高さと上下は lidar_height / lidar_upside_down ---
+    lidar_x: 0.0
+    lidar_y: 0.0
+    lidar_yaw: 0.0
+
+    # --- 真の初期姿勢の、sotoba の初期シード (start_*) からのずれ (フィールド座標系) ---
+    start_offset_x: 0.02       # [m]
+    start_offset_y: -0.01      # [m]
+    start_offset_yaw: 0.01     # [rad]
+
+    # --- スキャン ---
+    frame_id: laser
+    scan_hz: 20.0
+    ray_num: 720
+    angle_min: -3.14159265
+    angle_max: 3.14159265
+    range_min: 0.05
+    range_max: 30.0
+    range_noise_stddev: 0.005  # [m]
+    scan_latency: 0.0          # [s] スキャンの時刻から届くまでの遅れ
+
+    # --- 運動 (実行中に変えられる) ---
+    cmd_timeout: 0.2           # [s] cmd_vel がこれより来なければ止まる
+    plant:
+      tau_linear: 0.1          # [s] cmd_vel への追従の時定数
+      tau_angular: 0.1
+      max_accel_linear: 0.0    # [m/s^2] <= 0 で無効
+      max_accel_angular: 0.0   # [rad/s^2]
+      velocity_scale_linear: 1.0   # 実際に出る速度 / 指令 (滑りの模擬)
+      velocity_scale_angular: 1.0
+
+    # --- 真値 ---
+    field_frame: field
+    truth_frame: base_link_truth

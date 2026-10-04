@@ -11,6 +11,7 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 | `src/mini_shirasu_ros` | mini-shirasu (ブラシ付き DC モータドライバ) と CAN で話す |
 | `src/robomas_plugins` | USB-CAN ブリッジ (crs-kouhou/robomas_plugins のフォーク)。`robomas_can_tx` / `robomas_can_rx` だけを使う |
 | `src/oumuamua_bringup` | 上をまとめて起動する launch と、この機体のパラメータ |
+| `src/oumuamua_sim` | `/cmd_vel` から先のシミュレータ (平面運動と 2D LiDAR) |
 
 ## つながり
 
@@ -39,6 +40,7 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `mini_shirasu_params` | `config/mini_shirasu.yaml` | mini_shirasu_node (`wheel0..`) のパラメータ |
 | `bridge` | `true` | robomas_bridge (USB-CAN) を起動する |
 | `rviz` | `false` | RViz2 を起動する |
+| `sim` | `false` | `/cmd_vel` から先をシミュレータにする (下の「シミュレーション」) |
 
 次は**例・仮の値のまま**なので、実機に合わせること。
 
@@ -56,6 +58,34 @@ mini-shirasu のファームには通信タイムアウトが無いので、PC �
 緊急停止スイッチに頼ることになる。
 sotoba_node の初期姿勢 (`start_x` など) は
 LiDAR の姿勢である点に注意 (base_link ではない)。
+
+## シミュレーション (`sim:=true`)
+
+`/cmd_vel` から先 (足回り・モータドライバ・USB-CAN・LiDAR) を `oumuamua_sim` の `robot_sim` に置き換える。
+sotoba_node と tracker_node は実機と同じものが動く。
+
+```bash
+container/run.sh ros2 launch oumuamua_bringup bringup.launch.py sim:=true
+# 目標を出す (例: 初期位置のまわりを半径 0.1 m で回る)
+container/run.sh ros2 run holonomic_tracker circle_reference_publisher --ros-args \
+  -p center_x:=0.021 -p center_y:=0.444 -p radius:=0.1 -p period:=8.0 -p spin:=0.0 \
+  -r reference:=/tracker_node/reference
+```
+
+robot_sim がやること:
+
+- `/cmd_vel` (機体座標系) に、軸ごとの 1 次遅れ (`plant.tau_*`)・加速度制限・速度の倍率 (滑りの模擬) で追従し、姿勢を積分する
+- sotoba_ros の `objects.cpp` と**同じフィールド形状**にレイキャストして `/scan` を出す
+  (`scan_hz`、`ray_num`、`range_noise_stddev`、`scan_latency`)。LiDAR の取付 (`lidar_*` 引数) と上下逆さも反映する
+- 真の姿勢を `/robot_sim/truth_pose` (`PoseStamped`)・`/robot_sim/truth_odom` と TF `field -> base_link_truth` に出す。
+  推定 (TF `field -> base_link`) と並べて比べられる
+- 真の初期姿勢は、sotoba の初期シード (`start_*`) から `start_offset_*` だけずらしてある (初期の推定誤差の模擬)
+- `/robot_sim/reset` (`std_srvs/Trigger`) で初期姿勢に戻す
+
+フィールドの寸法と初期姿勢は sotoba_node と同じパラメータファイルを読むので食い違わない。
+パラメータは `src/oumuamua_sim/config/robot_sim.yaml`。
+
+模擬していないもの: 壁やノーツとの衝突 (すり抜ける)、車輪ごとの速度上限、モータドライバと CAN。
 
 ## CAN 通信のテスト (モータは回さない)
 

@@ -21,6 +21,7 @@
   <exec_depend>holonomic_tracker</exec_depend>
   <exec_depend>omni_chassis</exec_depend>
   <exec_depend>mini_shirasu_ros</exec_depend>
+  <exec_depend>oumuamua_sim</exec_depend>
   <exec_depend>robomas_plugins</exec_depend>
 
   <export>
