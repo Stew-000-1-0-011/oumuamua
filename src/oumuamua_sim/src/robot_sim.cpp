@@ -6,6 +6,8 @@
 /// - 真の姿勢を `~/truth_pose` と TF (`field -> base_link_truth`) に出す (推定との比較用)
 /// - 車輪オドメトリの代わりに、機体速度の実測を `~/body_velocity` に出す (滑りの分だけずれ、雑音が乗る)
 /// - `scan_duration` > 0 なら、1 スキャンの光線を時間をずらして撮る (回転式 LiDAR の歪み)
+/// - 機体の振動による傾き (`tilt.*`) と、フィールドの外の環境 (`environment.*`: 床・部屋の壁・障害物) を模擬する。
+///   LiDAR が傾くと走査面が水平でなくなり、壁を越えた光線が外の物に当たったり、床に当たったりする
 ///
 /// フィールドの寸法と初期姿勢のパラメータ名・意味は sotoba_node と同じにしてあるので、
 /// sotoba_node と同じパラメータファイルを読ませれば食い違わない。
@@ -34,6 +36,8 @@
 #include <tf2_ros/transform_broadcaster.hpp>
 
 #include <sotoba/math/se3.hpp>
+#include <sotoba/surface/box.hpp>
+#include <sotoba/surface/rectangle.hpp>
 #include <sotoba/math/vec.hpp>
 
 #include "oumuamua_sim/plant.hpp"
@@ -94,6 +98,17 @@ namespace {
 					this->surfaces_.push_back(s);
 				}
 			}
+
+			// --- フィールドの外の環境 (sotoba は知らない。LiDAR が傾いたときに見える) ---
+			this->add_environment();
+
+			// --- 機体の傾き (振動) ---
+			this->declare_parameter<double>("tilt.static_roll", 0.0);
+			this->declare_parameter<double>("tilt.static_pitch", 0.0);
+			this->declare_parameter<double>("tilt.amplitude", 0.0);
+			this->declare_parameter<double>("tilt.amplitude_per_speed", 0.0);
+			this->declare_parameter<double>("tilt.frequency", 8.0);
+			this->declare_parameter<double>("tilt.random_stddev", 0.0);
 
 			// --- LiDAR の取付 (base_link -> laser) ---
 			const double lidar_height =
@@ -210,6 +225,66 @@ namespace {
 		}
 
 	private:
+		/// 床・部屋の壁・部屋の中の障害物。フィールドの壁より外にあり、LiDAR が傾いたときにだけ見える
+		void add_environment() {
+			const bool floor = this->declare_parameter<bool>("environment.floor", true);
+			const double room_x = this->declare_parameter<double>("environment.room_half_x", 4.3);
+			const double room_y = this->declare_parameter<double>("environment.room_half_y", 3.2);
+			const double room_h = this->declare_parameter<double>("environment.room_height", 2.5);
+			const auto clutter = this->declare_parameter<std::int64_t>("environment.clutter_count", 8);
+			const double field_x = this->declare_parameter<double>("environment.field_half_x", 2.82);
+			const double field_y = this->declare_parameter<double>("environment.field_half_y", 1.69);
+
+			const auto id = sotoba::math::SquareMat<3>::ide();
+			if (floor) {
+				this->environment_.emplace_back(sotoba::surface::Rectangle(
+					Vec3{0.f, 0.f, 0.f},
+					sotoba::math::Vec4{1.f, 0.f, 0.f, 50.f},
+					sotoba::math::Vec4{0.f, 1.f, 0.f, 50.f},
+					UVec3{0.f, 0.f, 1.f}
+				));
+			}
+			if (room_x > 0.0 && room_y > 0.0) {
+				this->environment_.emplace_back(sotoba::surface::BoxInner(
+					Vec3{0.f, 0.f, static_cast<float>(0.5 * room_h)},
+					id,
+					Vec3{static_cast<float>(room_x), static_cast<float>(room_y), static_cast<float>(0.5 * room_h)},
+					std::array<bool, 6>{false, false, false, false, true, true}
+				));
+			}
+			// 人や机の代わりの箱を、フィールドと部屋の壁の間に置く (毎回同じ配置)
+			std::mt19937 rng{1};
+			std::uniform_real_distribution<double> ux{-room_x + 0.3, room_x - 0.3};
+			std::uniform_real_distribution<double> uy{-room_y + 0.3, room_y - 0.3};
+			for (std::int64_t i = 0; i < clutter;) {
+				const double x = ux(rng);
+				const double y = uy(rng);
+				if (std::abs(x) < field_x + 0.3 && std::abs(y) < field_y + 0.3) {
+					continue;
+				}
+				this->environment_.emplace_back(sotoba::surface::BoxOuter(
+					Vec3{static_cast<float>(x), static_cast<float>(y), 0.6f}, id, Vec3{0.25f, 0.25f, 0.6f}
+				));
+				++i;
+			}
+		}
+
+		/// 時刻 t の機体の傾き (roll, pitch)。静的な傾き + 速度に比例する振幅の揺れ + 白色の揺れ
+		auto tilt_at(const rclcpp::Time& t, const double speed) -> std::pair<double, double> {
+			const auto d = [this](const char* name) { return this->get_parameter(name).as_double(); };
+			const double amp = d("tilt.amplitude") + d("tilt.amplitude_per_speed") * speed;
+			const double w = 2.0 * std::numbers::pi * d("tilt.frequency");
+			const double ts = t.seconds();
+			double roll = d("tilt.static_roll") + amp * std::sin(w * ts);
+			double pitch = d("tilt.static_pitch") + amp * std::sin(1.37 * w * ts + 1.0);
+			const double sigma = d("tilt.random_stddev");
+			if (sigma > 0.0) {
+				roll += std::normal_distribution<double>{0.0, sigma}(this->rng_);
+				pitch += std::normal_distribution<double>{0.0, sigma}(this->rng_);
+			}
+			return {roll, pitch};
+		}
+
 		void on_cmd(const geometry_msgs::msg::Twist& m) {
 			this->cmd_ = Twist2{.vx = m.linear.x, .vy = m.linear.y, .omega = m.angular.z};
 			this->cmd_received_ = this->now();
@@ -286,9 +361,12 @@ namespace {
 		}
 
 		/// 機体の姿勢 -> フィールドを LiDAR 座標系へ写す変換
-		auto lidar_from_field(const Pose2& base) const -> SE3 {
+		auto lidar_from_field(const Pose2& base, const std::pair<double, double>& tilt = {0.0, 0.0}) const -> SE3 {
+			// 傾きは機体の原点 (床面) まわり
 			const SE3 field_to_base =
-				math::trans(Vec3{static_cast<float>(base.x), static_cast<float>(base.y), 0.f}) * yaw_rotation(base.yaw);
+				math::trans(Vec3{static_cast<float>(base.x), static_cast<float>(base.y), 0.f}) * yaw_rotation(base.yaw)
+				* math::rot(math::ypr(Vec3{static_cast<float>(tilt.first), 0.f, 0.f}))
+				* math::rot(math::ypr(Vec3{0.f, static_cast<float>(tilt.second), 0.f}));
 			return (field_to_base * this->base_to_lidar_).inverse();
 		}
 
@@ -312,10 +390,15 @@ namespace {
 			scan.ranges.reserve(this->ray_num_);
 
 			// 歪みが無ければ全光線で同じ変換なので、曲面を一度だけ動かす
-			std::vector<Surface> surfaces = this->surfaces_;
+			// フィールドの物と、フィールドの外の環境の両方に当てる
+			std::vector<Surface> world = this->surfaces_;
+			world.insert(world.end(), this->environment_.begin(), this->environment_.end());
+			std::vector<Surface> surfaces = world;
+			const auto& v = this->plant_->velocity();
+			const double speed = std::hypot(v.vx, v.vy);
 			const bool distorted = this->scan_duration_ > 0.0;
 			if (!distorted) {
-				const SE3 T = this->lidar_from_field(this->pose_at(stamp));
+				const SE3 T = this->lidar_from_field(this->pose_at(stamp), this->tilt_at(stamp, speed));
 				for (auto& s : surfaces) {
 					std::visit([&](auto& v) { v.apply_se3(T); }, s);
 				}
@@ -324,9 +407,9 @@ namespace {
 			for (std::size_t i = 0; i < this->ray_num_; ++i) {
 				if (distorted) {
 					const auto t = stamp + rclcpp::Duration::from_seconds(scan.time_increment * static_cast<double>(i));
-					const SE3 T = this->lidar_from_field(this->pose_at(t));
+					const SE3 T = this->lidar_from_field(this->pose_at(t), this->tilt_at(t, speed));
 					for (std::size_t k = 0; k < surfaces.size(); ++k) {
-						surfaces[k] = this->surfaces_[k];
+						surfaces[k] = world[k];
 						std::visit([&](auto& v) { v.apply_se3(T); }, surfaces[k]);
 					}
 				}
@@ -378,6 +461,8 @@ namespace {
 		}
 
 		std::vector<Surface> surfaces_{};
+		/// フィールドの外の環境 (sotoba の Surface と同じ型で持つ)
+		std::vector<Surface> environment_{};
 		SE3 base_to_lidar_{};
 		Pose2 initial_{};
 		std::optional<Plant> plant_{};

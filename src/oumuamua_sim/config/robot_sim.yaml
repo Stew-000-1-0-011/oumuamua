@@ -43,6 +43,27 @@ robot_sim:
       velocity_scale_linear: 1.0   # 実際に出る速度 / 指令 (滑りの模擬)
       velocity_scale_angular: 1.0
 
+    # --- 機体の傾き (振動) [rad] ---
+    # 走査面が水平でなくなり、壁を越えた光線がフィールドの外の物に、下を向いた光線が床に当たる。
+    # roll と pitch は振幅 (amplitude + amplitude_per_speed * 速さ) で、少しずらした周波数で揺れる
+    tilt:
+      static_roll: 0.0           # 取付の傾き
+      static_pitch: 0.0
+      amplitude: 0.0             # 揺れの振幅
+      amplitude_per_speed: 0.0   # 速さ 1 m/s あたりに増える振幅 [rad/(m/s)]
+      frequency: 8.0             # [Hz]
+      random_stddev: 0.0         # 白色の揺れ (光線ごと)
+
+    # --- フィールドの外の環境 (sotoba は知らない。LiDAR が傾いたときに見える) ---
+    environment:
+      floor: true
+      room_half_x: 4.3           # [m] 部屋の壁 (0 で無し)
+      room_half_y: 3.2
+      room_height: 2.5
+      clutter_count: 8           # フィールドの外に置く箱 (人や机の代わり、0.5 x 0.5 x 1.2 m)
+      field_half_x: 2.82         # 箱を置かない範囲 (フィールドの外周壁)
+      field_half_y: 1.69
+
     # --- 機体速度の実測 (車輪オドメトリの代わり) ---
     # ~/body_velocity (TwistStamped、機体座標系)。滑り (plant.velocity_scale_*) のぶんは割り戻すので、
     # 車輪オドメトリと同じく滑りを知らない値になる
