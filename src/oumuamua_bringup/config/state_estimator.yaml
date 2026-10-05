@@ -1,0 +1,8 @@
+# state_estimator の上書き。state_estimator の config/state_estimator.yaml の後に読む。
+# 速度の入力 (~/body_velocity) は bringup.launch.py の velocity_source 引数で remap する。
+# velocity_source:=cmd_vel のときは filter.tau_* も launch が上書きする (指令への追従の遅れ)
+state_estimator:
+  ros__parameters:
+    field_frame: field
+    base_frame: base_link
+    lidar_frame: laser

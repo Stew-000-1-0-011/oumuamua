@@ -5,6 +5,7 @@
 robot_sim:
   ros__parameters:
     cmd_vel_topic: /cmd_vel
+    cmd_vel_stamped: false     # true なら TwistStamped で受ける
     scan_topic: /scan
     sim_rate: 200.0            # [Hz] 運動の積分の周期
 
@@ -27,7 +28,10 @@ robot_sim:
     range_min: 0.05
     range_max: 30.0
     range_noise_stddev: 0.005  # [m]
-    scan_latency: 0.0          # [s] スキャンの時刻から届くまでの遅れ
+    scan_latency: 0.0          # [s] 撮り終えてから届くまでの遅れ
+    # [s] 1 スキャンを撮るのにかかる時間 (回転式 LiDAR の 1 周)。0 なら一瞬で撮る。
+    # 撮っている間に機体が動くぶん歪む (例: 40 Hz の LiDAR なら 0.025)
+    scan_duration: 0.0
 
     # --- 運動 (実行中に変えられる) ---
     cmd_timeout: 0.2           # [s] cmd_vel がこれより来なければ止まる
@@ -38,6 +42,13 @@ robot_sim:
       max_accel_angular: 0.0   # [rad/s^2]
       velocity_scale_linear: 1.0   # 実際に出る速度 / 指令 (滑りの模擬)
       velocity_scale_angular: 1.0
+
+    # --- 機体速度の実測 (車輪オドメトリの代わり) ---
+    # ~/body_velocity (TwistStamped、機体座標系)。滑り (plant.velocity_scale_*) のぶんは割り戻すので、
+    # 車輪オドメトリと同じく滑りを知らない値になる
+    body_velocity_rate: 50.0
+    body_velocity_noise_linear: 0.02   # [m/s]
+    body_velocity_noise_angular: 0.05  # [rad/s]
 
     # --- 真値 ---
     field_frame: field

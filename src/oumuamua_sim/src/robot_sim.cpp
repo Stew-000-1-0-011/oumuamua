@@ -4,6 +4,8 @@
 /// - `cmd_vel` (機体座標系) を受け、全方向移動ロボットの平面運動を積分する (plant.cpp)
 /// - sotoba_ros の objects.cpp と同じフィールド形状に対して 2D LiDAR をレイキャストし、`/scan` を出す
 /// - 真の姿勢を `~/truth_pose` と TF (`field -> base_link_truth`) に出す (推定との比較用)
+/// - 車輪オドメトリの代わりに、機体速度の実測を `~/body_velocity` に出す (滑りの分だけずれ、雑音が乗る)
+/// - `scan_duration` > 0 なら、1 スキャンの光線を時間をずらして撮る (回転式 LiDAR の歪み)
 ///
 /// フィールドの寸法と初期姿勢のパラメータ名・意味は sotoba_node と同じにしてあるので、
 /// sotoba_node と同じパラメータファイルを読ませれば食い違わない。
@@ -24,6 +26,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
@@ -144,6 +147,7 @@ namespace {
 			this->range_max_ = static_cast<float>(this->declare_parameter<double>("range_max", 30.0));
 			this->declare_parameter<double>("range_noise_stddev", 0.005);
 			this->declare_parameter<double>("scan_latency", 0.0);
+			this->declare_parameter<double>("scan_duration", 0.0);
 			const double scan_hz = this->declare_parameter<double>("scan_hz", 20.0);
 
 			// --- 真値 ---
@@ -156,12 +160,24 @@ namespace {
 			);
 
 			const auto cmd_topic = this->declare_parameter<std::string>("cmd_vel_topic", "/cmd_vel");
+			const bool cmd_vel_stamped = this->declare_parameter<bool>("cmd_vel_stamped", false);
+			const double body_velocity_rate = this->declare_parameter<double>("body_velocity_rate", 50.0);
+			this->declare_parameter<double>("body_velocity_noise_linear", 0.02);
+			this->declare_parameter<double>("body_velocity_noise_angular", 0.05);
+			this->read_runtime_params();
 			const auto scan_topic = this->declare_parameter<std::string>("scan_topic", "/scan");
-			this->cmd_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-				cmd_topic, 10, [this](const geometry_msgs::msg::Twist& m) {
-					this->cmd_ = Twist2{.vx = m.linear.x, .vy = m.linear.y, .omega = m.angular.z};
-					this->cmd_received_ = this->now();
-				}
+			if (cmd_vel_stamped) {
+				this->cmd_stamped_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+					cmd_topic, 10, [this](const geometry_msgs::msg::TwistStamped& m) { this->on_cmd(m.twist); }
+				);
+			} else {
+				this->cmd_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+					cmd_topic, 10, [this](const geometry_msgs::msg::Twist& m) { this->on_cmd(m); }
+				);
+			}
+			this->body_velocity_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("~/body_velocity", 10);
+			this->body_velocity_timer_ = this->create_wall_timer(
+				std::chrono::duration<double>(1.0 / body_velocity_rate), [this] { this->publish_body_velocity(); }
 			);
 			this->scan_pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>(scan_topic, rclcpp::SensorDataQoS{});
 			this->truth_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("~/truth_pose", 10);
@@ -194,6 +210,27 @@ namespace {
 		}
 
 	private:
+		void on_cmd(const geometry_msgs::msg::Twist& m) {
+			this->cmd_ = Twist2{.vx = m.linear.x, .vy = m.linear.y, .omega = m.angular.z};
+			this->cmd_received_ = this->now();
+		}
+
+		/// 車輪オドメトリの模擬。車輪は地面との滑りを知らないので、実際の速度を velocity_scale で割り戻す
+		void publish_body_velocity() {
+			const auto& v = this->plant_->velocity();
+			const auto params = this->read_plant_params();
+			const auto noise = [this](const double sigma) {
+				return sigma > 0.0 ? std::normal_distribution<double>{0.0, sigma}(this->rng_) : 0.0;
+			};
+			geometry_msgs::msg::TwistStamped m{};
+			m.header.stamp = this->now();
+			m.header.frame_id = "base_link";
+			m.twist.linear.x = v.vx / params.velocity_scale_linear + noise(this->body_noise_linear_);
+			m.twist.linear.y = v.vy / params.velocity_scale_linear + noise(this->body_noise_linear_);
+			m.twist.angular.z = v.omega / params.velocity_scale_angular + noise(this->body_noise_angular_);
+			this->body_velocity_pub_->publish(m);
+		}
+
 		auto read_plant_params() -> PlantParams {
 			return PlantParams{
 				.tau_linear = this->get_parameter("plant.tau_linear").as_double(),
@@ -209,6 +246,11 @@ namespace {
 			this->cmd_timeout_ = this->get_parameter("cmd_timeout").as_double();
 			this->range_noise_ = static_cast<float>(this->get_parameter("range_noise_stddev").as_double());
 			this->scan_latency_ = this->get_parameter("scan_latency").as_double();
+			this->scan_duration_ = std::max(0.0, this->get_parameter("scan_duration").as_double());
+			if (this->has_parameter("body_velocity_noise_angular")) {
+				this->body_noise_linear_ = this->get_parameter("body_velocity_noise_linear").as_double();
+				this->body_noise_angular_ = this->get_parameter("body_velocity_noise_angular").as_double();
+			}
 			if (this->plant_) {
 				this->plant_->set_params(this->read_plant_params());
 			}
@@ -226,7 +268,7 @@ namespace {
 			// スキャンの遅れ用に、少しだけ姿勢の履歴を持つ
 			this->history_.push_back({now, pose});
 			while (this->history_.size() > 2
-				&& (now - this->history_.front().first).seconds() > this->scan_latency_ + 0.5) {
+				&& (now - this->history_.front().first).seconds() > this->scan_latency_ + this->scan_duration_ + 0.5) {
 				this->history_.pop_front();
 			}
 
@@ -243,20 +285,19 @@ namespace {
 			return this->history_.empty() ? this->plant_->pose() : this->history_.front().second;
 		}
 
-		void publish_scan() {
-			// scan_latency だけ前の姿勢で撮ったスキャンが、今届いたことにする
-			const auto now = this->now();
-			const auto stamp = now - rclcpp::Duration::from_seconds(this->scan_latency_);
-			const Pose2 base = this->pose_at(stamp);
-
-			// フィールド -> LiDAR 座標系の変換を、全曲面に掛ける
+		/// 機体の姿勢 -> フィールドを LiDAR 座標系へ写す変換
+		auto lidar_from_field(const Pose2& base) const -> SE3 {
 			const SE3 field_to_base =
 				math::trans(Vec3{static_cast<float>(base.x), static_cast<float>(base.y), 0.f}) * yaw_rotation(base.yaw);
-			const SE3 lidar_from_field = (field_to_base * this->base_to_lidar_).inverse();
-			std::vector<Surface> surfaces = this->surfaces_;
-			for (auto& s : surfaces) {
-				std::visit([&](auto& v) { v.apply_se3(lidar_from_field); }, s);
-			}
+			return (field_to_base * this->base_to_lidar_).inverse();
+		}
+
+		void publish_scan() {
+			// scan_latency だけ前に撮り終えたスキャンが、今届いたことにする。
+			// 時刻は撮り始め (LaserScan の約束)。光線 i は撮り始めから i * time_increment 後に撮る
+			const auto now = this->now();
+			const auto end = now - rclcpp::Duration::from_seconds(this->scan_latency_);
+			const auto stamp = end - rclcpp::Duration::from_seconds(this->scan_duration_);
 
 			sensor_msgs::msg::LaserScan scan{};
 			scan.header.stamp = stamp;
@@ -264,11 +305,31 @@ namespace {
 			scan.angle_min = this->angle_min_;
 			scan.angle_max = this->angle_max_;
 			scan.angle_increment = (this->angle_max_ - this->angle_min_) / static_cast<float>(this->ray_num_);
-			scan.scan_time = 0.f;
+			scan.time_increment = static_cast<float>(this->scan_duration_ / static_cast<double>(this->ray_num_));
+			scan.scan_time = static_cast<float>(this->scan_duration_);
 			scan.range_min = this->range_min_;
 			scan.range_max = this->range_max_;
 			scan.ranges.reserve(this->ray_num_);
+
+			// 歪みが無ければ全光線で同じ変換なので、曲面を一度だけ動かす
+			std::vector<Surface> surfaces = this->surfaces_;
+			const bool distorted = this->scan_duration_ > 0.0;
+			if (!distorted) {
+				const SE3 T = this->lidar_from_field(this->pose_at(stamp));
+				for (auto& s : surfaces) {
+					std::visit([&](auto& v) { v.apply_se3(T); }, s);
+				}
+			}
+
 			for (std::size_t i = 0; i < this->ray_num_; ++i) {
+				if (distorted) {
+					const auto t = stamp + rclcpp::Duration::from_seconds(scan.time_increment * static_cast<double>(i));
+					const SE3 T = this->lidar_from_field(this->pose_at(t));
+					for (std::size_t k = 0; k < surfaces.size(); ++k) {
+						surfaces[k] = this->surfaces_[k];
+						std::visit([&](auto& v) { v.apply_se3(T); }, surfaces[k]);
+					}
+				}
 				const float angle = scan.angle_min + scan.angle_increment * static_cast<float>(i);
 				const UVec3 ray{std::cos(angle), std::sin(angle), 0.f};
 				float nearest2 = std::numeric_limits<float>::infinity();
@@ -334,12 +395,18 @@ namespace {
 		float range_max_{};
 		float range_noise_{};
 		double scan_latency_{};
+		double scan_duration_{};
+		double body_noise_linear_{};
+		double body_noise_angular_{};
 		std::mt19937 rng_{0};
 
 		std::string field_frame_{};
 		std::string truth_frame_{};
 
 		rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_sub_{};
+		rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_stamped_sub_{};
+		rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr body_velocity_pub_{};
+		rclcpp::TimerBase::SharedPtr body_velocity_timer_{};
 		rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_pub_{};
 		rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr truth_pub_{};
 		rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr truth_odom_pub_{};

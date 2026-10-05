@@ -12,12 +12,26 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 | `src/robomas_plugins` | USB-CAN ブリッジ (crs-kouhou/robomas_plugins のフォーク)。`robomas_can_tx` / `robomas_can_rx` だけを使う |
 | `src/oumuamua_bringup` | 上をまとめて起動する launch と、この機体のパラメータ |
 | `src/oumuamua_sim` | `/cmd_vel` から先のシミュレータ (平面運動と 2D LiDAR) |
+| `src/state_estimator` | 自己位置と機体速度の推定。sotoba_node と対になって事前分布を渡す |
 
 ## つながり
 
-`/scan` (urg_node2) -> sotoba_node -> TF `field -> base_link` -> tracker_node -> `/cmd_vel`
--> chassis_node -> `/wheel<i>/target_velocity` -> mini_shirasu_node (`wheel0..2`)
--> `/robomas_can_tx` -> robomas_bridge (USB-CAN) -> mini-shirasu 3 枚 (3 輪オムニ)
+- `/scan` (urg_node2) -> sotoba_node。sotoba_node は state_estimator から事前分布 (`/sotoba_node/prior_beliefs`) を受け、
+  事後分布 (`/sotoba_node/posterior_beliefs`) を返す
+- state_estimator は機体速度 (`~/body_velocity`) で予測し、sotoba の事後で更新する。
+  推定を `/state_estimator/odom` と TF `field -> base_link` に出す
+- tracker_node は `/state_estimator/odom` を使って `/cmd_vel` (`TwistStamped`) を出す
+- chassis_node -> `/wheel<i>/target_velocity` -> mini_shirasu_node (`wheel0..2`)
+  -> `/robomas_can_tx` -> robomas_bridge (USB-CAN) -> mini-shirasu 3 枚 (3 輪オムニ)
+- 車輪の実測: mini_shirasu_node の `~/joint_state` -> chassis_node が機体速度にして `~/body_velocity`
+  -> state_estimator の `~/body_velocity` (車輪オドメトリ)
+
+計算が循環する (事前 -> sotoba -> 事後 -> state_estimator) ので、時刻をまたいで状態を持つのは
+state_estimator だけにしてある。リセットは state_estimator の `~/reset` か `/initialpose` (RViz の 2D Pose Estimate) で行う。
+詳しくは `src/state_estimator/README.md`。
+
+`estimator:=false` なら state_estimator を立てず、sotoba_node が持続予測 (`prior_source: internal`) で単体で動いて
+TF `field -> base_link` を出し、tracker_node はそれを使う (前の構成)。
 
 tracker_node に目標 (`/tracker_node/reference`, `holonomic_tracker/msg/TrackingReference`)
 を出すノードはまだ無い。
@@ -41,6 +55,9 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `bridge` | `true` | robomas_bridge (USB-CAN) を起動する |
 | `rviz` | `false` | RViz2 を起動する |
 | `sim` | `false` | `/cmd_vel` から先をシミュレータにする (下の「シミュレーション」) |
+| `estimator` | `true` | state_estimator を使う。`false` なら sotoba_node 単体 |
+| `velocity_source` | `wheels` | state_estimator の速度入力。`wheels`: 車輪オドメトリ (`sim:=true` なら robot_sim の模擬)、`cmd_vel`: 指令値 |
+| `cmd_tau` | `0.1` | `velocity_source:=cmd_vel` のときの、指令への追従の時定数 [s] |
 
 次は**例・仮の値のまま**なので、実機に合わせること。
 
@@ -77,6 +94,8 @@ robot_sim がやること:
 - `/cmd_vel` (機体座標系) に、軸ごとの 1 次遅れ (`plant.tau_*`)・加速度制限・速度の倍率 (滑りの模擬) で追従し、姿勢を積分する
 - sotoba_ros の `objects.cpp` と**同じフィールド形状**にレイキャストして `/scan` を出す
   (`scan_hz`、`ray_num`、`range_noise_stddev`、`scan_latency`)。LiDAR の取付 (`lidar_*` 引数) と上下逆さも反映する
+- 車輪オドメトリの代わりに機体速度の実測 (`/robot_sim/body_velocity`) を出す。滑り (`plant.velocity_scale_*`) は知らない値で、雑音が乗る
+- `scan_duration` > 0 なら、1 スキャンの光線を時間をずらして撮る (回転式 LiDAR の、動きながら撮ることによる歪み)
 - 真の姿勢を `/robot_sim/truth_pose` (`PoseStamped`)・`/robot_sim/truth_odom` と TF `field -> base_link_truth` に出す。
   推定 (TF `field -> base_link`) と並べて比べられる
 - 真の初期姿勢は、sotoba の初期シード (`start_*`) から `start_offset_*` だけずらしてある (初期の推定誤差の模擬)
@@ -86,6 +105,13 @@ robot_sim がやること:
 パラメータは `src/oumuamua_sim/config/robot_sim.yaml`。
 
 模擬していないもの: 壁やノーツとの衝突 (すり抜ける)、車輪ごとの速度上限、モータドライバと CAN。
+
+### launch のパラメータの上書きについて
+
+launch_ros の `parameters=[{...}]` (辞書) は `"/**"` として書かれ、パッケージのパラメータファイルに
+ノード名で書かれた値に**負ける**。`ros_arguments` の `-p` もパラメータファイルより前に並ぶので負ける。
+`bringup.launch.py` で launch 引数から切り替える値は、`NodeParams` (ノード名をキーにした一時ファイル) を
+`parameters` の最後に置いて渡している。
 
 ## CAN 通信のテスト (モータは回さない)
 

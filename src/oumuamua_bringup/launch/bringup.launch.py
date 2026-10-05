@@ -6,11 +6,20 @@
 
 tracker_node の目標 (/tracker_node/reference) を出すノードはここには含まない。
 
+estimator:=true (既定) なら state_estimator が自己位置と速度を推定し、sotoba_node には事前分布を、
+tracker_node には推定 (~/odom) を渡す。速度の入力は velocity_source で選ぶ:
+  wheels  (既定): 車輪オドメトリ (chassis_node の ~/body_velocity、sim:=true なら robot_sim の ~/body_velocity)
+  cmd_vel        : tracker_node の指令 (下位の速度制御の遅れを cmd_tau で与える)
+estimator:=false なら sotoba_node が持続予測で単体で動き、TF field -> base_link を出す。
+
 sim:=true なら、/cmd_vel から先 (足回り・モータドライバ・USB-CAN・LiDAR) の代わりに
 oumuamua_sim の robot_sim を立てる。robot_sim は /cmd_vel で動き、/scan を出す。
 """
 
-from launch import LaunchDescription
+import tempfile
+
+import yaml
+from launch import LaunchDescription, Substitution
 from launch.actions import DeclareLaunchArgument, EmitEvent, OpaqueFunction, RegisterEventHandler
 from launch.conditions import IfCondition, UnlessCondition
 from launch.event_handlers import OnProcessStart
@@ -24,6 +33,7 @@ from launch_ros.actions import ComposableNodeContainer, LifecycleNode, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.event_handlers import OnStateTransition
 from launch_ros.events.lifecycle import ChangeState
+from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
 from launch_ros.substitutions import FindPackageShare
 from lifecycle_msgs.msg import Transition
 
@@ -32,12 +42,43 @@ def config(package, name):
     return PathJoinSubstitution([FindPackageShare(package), 'config', name])
 
 
+class NodeParams(Substitution):
+    """パラメータの上書きを、ノード名をキーにした一時ファイルに書いてそのパスを返す。
+
+    launch_ros の辞書のパラメータは "/**" として書かれ、パッケージのパラメータファイルに
+    ノード名で書かれた値に負ける (ros_arguments の -p はさらにパラメータファイルより前に並ぶ)。
+    上書きしたい値は、これを parameters の最後に置いて渡す。
+    値はサブスティテューションでもよく、展開した文字列を YAML として読む ('true' -> bool など)。
+    """
+
+    def __init__(self, node_name, params):
+        super().__init__()
+        self.node_name = node_name
+        self.params = params
+
+    def perform(self, context):
+        values = {}
+        for key, value in self.params.items():
+            if isinstance(value, (bool, int, float)):
+                values[key] = value
+            else:
+                text = perform_substitutions(context, normalize_to_list_of_substitutions(value))
+                values[key] = yaml.safe_load(text)
+        with tempfile.NamedTemporaryFile('w', prefix=f'{self.node_name}_', suffix='.yaml', delete=False) as f:
+            yaml.safe_dump({self.node_name: {'ros__parameters': values}}, f)
+            return f.name
+
+
 def generate_launch_description():
     lidar = LaunchConfiguration('lidar')
     lidar_connection = LaunchConfiguration('lidar_connection')
     bridge = LaunchConfiguration('bridge')
     rviz = LaunchConfiguration('rviz')
     sim = LaunchConfiguration('sim')
+    estimator = LaunchConfiguration('estimator')
+    velocity_source = LaunchConfiguration('velocity_source')
+    # 文字列 'true' / 'false' を、パラメータとして bool で渡すための式
+    not_estimator = PythonExpression(["'", estimator, "' != 'true'"])
     # 実機でだけ立てるもの
     real = UnlessCondition(sim)
     lidar_real = IfCondition(PythonExpression(["'", lidar, "' == 'true' and '", sim, "' != 'true'"]))
@@ -104,13 +145,42 @@ def generate_launch_description():
         parameters=[
             config('sotoba_ros', 'sotoba_node.yaml'),
             config('oumuamua_bringup', 'sotoba_node.yaml'),
-            {
+            NodeParams('sotoba_node', {
                 'lidar_height': LaunchConfiguration('lidar_z'),
                 'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
-            },
+                'prior_source': PythonExpression(["'external' if '", estimator, "' == 'true' else 'internal'"]),
+                'publish_tf': not_estimator,
+            }),
         ],
         output='screen',
     )
+
+    # --- 状態推定 (state_estimator) ---
+    def make_estimator(context):
+        if estimator.perform(context) != 'true':
+            return []
+        source = velocity_source.perform(context)
+        params = [
+            config('state_estimator', 'state_estimator.yaml'),
+            config('oumuamua_bringup', 'state_estimator.yaml'),
+        ]
+        if source == 'cmd_vel':
+            velocity_topic = '/cmd_vel'
+            tau = float(LaunchConfiguration('cmd_tau').perform(context))
+            params.append(NodeParams('state_estimator', {'filter.tau_linear': tau, 'filter.tau_angular': tau}))
+        elif source == 'wheels':
+            velocity_topic = '/robot_sim/body_velocity' if sim.perform(context) == 'true' else '/chassis_node/body_velocity'
+        else:
+            raise RuntimeError(f"velocity_source must be 'wheels' or 'cmd_vel': {source}")
+        return [Node(
+            package='state_estimator',
+            executable='state_estimator_node',
+            name='state_estimator',
+            parameters=params,
+            remappings=[('~/body_velocity', velocity_topic)],
+            output='screen',
+        )]
+    state_estimator = OpaqueFunction(function=make_estimator)
 
     # --- 軌道追従 (holonomic_tracker) ---
     tracker = Node(
@@ -120,6 +190,9 @@ def generate_launch_description():
         parameters=[
             config('holonomic_tracker', 'tracker_node.yaml'),
             config('oumuamua_bringup', 'tracker_node.yaml'),
+            NodeParams('tracker_node', {
+                'pose_source': PythonExpression(["'odom' if '", estimator, "' == 'true' else 'tf'"]),
+            }),
         ],
         output='screen',
     )
@@ -129,7 +202,7 @@ def generate_launch_description():
         package='omni_chassis',
         executable='chassis_node',
         name='chassis_node',
-        parameters=[LaunchConfiguration('chassis_params')],
+        parameters=[LaunchConfiguration('chassis_params'), NodeParams('chassis_node', {'cmd_vel_stamped': True})],
         output='screen',
         condition=real,
     )
@@ -178,13 +251,14 @@ def generate_launch_description():
             config('sotoba_ros', 'sotoba_node.yaml'),
             config('oumuamua_bringup', 'sotoba_node.yaml'),
             config('oumuamua_sim', 'robot_sim.yaml'),
-            {
+            NodeParams('robot_sim', {
+                'cmd_vel_stamped': True,
                 'lidar_height': LaunchConfiguration('lidar_z'),
                 'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
                 'lidar_x': LaunchConfiguration('lidar_x'),
                 'lidar_y': LaunchConfiguration('lidar_y'),
                 'lidar_yaw': LaunchConfiguration('lidar_yaw'),
-            },
+            }),
         ],
         output='screen',
         condition=IfCondition(sim),
@@ -225,6 +299,15 @@ def generate_launch_description():
         DeclareLaunchArgument('bridge', default_value='true', description='robomas_bridge (USB-CAN) を起動する'),
         DeclareLaunchArgument('rviz', default_value='false', description='RViz2 を起動する'),
         DeclareLaunchArgument(
+            'estimator', default_value='true',
+            description='state_estimator で自己位置と速度を推定する。false なら sotoba_node 単体 (持続予測)'),
+        DeclareLaunchArgument(
+            'velocity_source', default_value='wheels', choices=['wheels', 'cmd_vel'],
+            description='state_estimator の速度入力。wheels: 車輪オドメトリ、cmd_vel: 指令値'),
+        DeclareLaunchArgument(
+            'cmd_tau', default_value='0.1',
+            description='velocity_source:=cmd_vel のときの、指令への追従の時定数 [s]'),
+        DeclareLaunchArgument(
             'sim', default_value='false',
             description='/cmd_vel から先を oumuamua_sim で模擬する (LiDAR・足回り・ドライバ・USB-CAN は立てない)'),
         urg_configure,
@@ -232,6 +315,7 @@ def generate_launch_description():
         urg,
         lidar_tf,
         sotoba,
+        state_estimator,
         tracker,
         chassis,
         wheels,

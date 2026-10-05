@@ -1,0 +1,54 @@
+# state_estimator のパラメータ。
+# 「起動時のみ」以外は ros2 param set で実行中に変えられる。
+state_estimator:
+  ros__parameters:
+    # --- 起動時のみ ---
+    field_frame: field
+    base_frame: base_link
+    lidar_frame: laser            # sotoba が見ているスキャンのフレーム。TF base_frame -> lidar_frame が要る
+    field_object: field           # sotoba の物体のうち、自己位置に使うもの
+    posterior_topic: /sotoba_node/posterior_beliefs
+    prior_topic: /sotoba_node/prior_beliefs
+    initial_topic: /sotoba_node/initial_beliefs
+    publish_tf: true              # field_frame -> base_frame を出す
+    publish_rate: 100.0           # [Hz] ~/odom・TF・sotoba への事前を出す周期
+
+    # --- 速度の入力 (~/body_velocity, TwistStamped, 機体座標系) ---
+    # 下位層が推定した実際の機体速度 (車輪オドメトリなど) を remap してつなぐ。
+    # 指令値 (cmd_vel) をつなぐときは filter.tau_* を下位の速度制御の時定数にする
+    input_delay: 0.0              # [s] 入力の時刻に足す (指令が機体に効き始めるまでの遅れ)
+
+    # --- 初期化 ---
+    # sotoba の定義上の初期姿勢 (initial_beliefs) から始める。/initialpose で任意の姿勢にも置ける
+    initial_sigma_xy: 0.05        # [m]
+    initial_sigma_yaw: 0.05       # [rad]
+
+    # --- 観測 (sotoba の事後) ---
+    subtract_prior: true          # 事後から自分の事前を差し引いてから入れる (sotoba が use_prior: true のとき)
+    measurement_floor_xy: 0.002   # [m] 観測の標準偏差の下限 (過信しないように)
+    measurement_floor_yaw: 0.002  # [rad]
+    measurement_timeout: 0.5      # [s] 観測がこれより途切れたら ~/odom と TF を止める
+    # 連続してこの回数だけ観測が使えなかったら (sotoba の失敗・ゲートでの棄却)、不確かさを足す
+    inflate_after_failures: 3
+    inflate_sigma_xy: 0.05        # [m]
+    inflate_sigma_yaw: 0.05       # [rad]
+    track_relations: true         # フィールド以外の物体 (ノーツなど) の位置関係を、推定が取れるたびに覚え直す
+
+    filter:
+      tau_linear: 0.0             # [s] 入力への追従の時定数。0 なら入力をそのまま速度とみなす
+      tau_angular: 0.0
+      velocity_noise_linear: 1.0  # [(m/s)^2/s] tau > 0 のときの速度の雑音
+      velocity_noise_angular: 4.0 # [(rad/s)^2/s]
+      input_sigma_linear: 0.05    # [m/s] tau = 0 のときの入力の不確かさ
+      input_sigma_angular: 0.1    # [rad/s]
+      pose_noise_linear: 0.01     # [m^2/s] 姿勢の雑音 (滑り・入力の誤差)
+      pose_noise_angular: 0.01    # [rad^2/s]
+      gate_sigma: 0.0             # 観測のゲート [sigma]。0 で無効
+      max_horizon: 0.5            # [s] 観測が無くても、これより長くは予測し直さない
+
+    # --- sotoba への事前 ---
+    prior:
+      sigma_z: 0.005              # [m] 機体の面外の不確かさ (取付の精度)
+      sigma_tilt: 0.005           # [rad]
+      relation_sigma_xy: 0.02     # [m] フィールド以外の物体の、フィールドに対する位置関係の不確かさ
+      relation_sigma_yaw: 0.05    # [rad]

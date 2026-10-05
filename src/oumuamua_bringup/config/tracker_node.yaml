@@ -1,7 +1,10 @@
 # tracker_node の上書き。holonomic_tracker の config/tracker_node.yaml の後に読む。
+# pose_source は bringup.launch.py が estimator 引数で決める
+# (true: state_estimator の ~/odom、false: sotoba の TF)。
 tracker_node:
   ros__parameters:
     field_frame: field
     base_frame: base_link
-    pose_source: tf
+    odom_topic: /state_estimator/odom
     cmd_vel_topic: /cmd_vel
+    cmd_vel_stamped: true       # state_estimator の速度入力に cmd_vel をつなぐこともあるので時刻付き

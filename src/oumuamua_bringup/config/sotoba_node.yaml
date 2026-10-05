@@ -1,8 +1,9 @@
 # sotoba_node の上書き。sotoba_ros の config/sotoba_node.yaml の後に読む。
-# 自己位置を TF field -> base_link として流し、tracker_node がそれを引く。
+# prior_source と publish_tf は bringup.launch.py が estimator 引数で決める:
+#   estimator:=true  -> prior_source: external (state_estimator の事前)、TF は state_estimator が出す
+#   estimator:=false -> prior_source: internal (持続予測)、TF field -> base_link を sotoba が出す
 /**:
   ros__parameters:
-    publish_tf: true
     tf_parent_frame: field
     tf_object: field
     # base_link -> laser (static TF) を引いて合成するので、TFツリーが二重親にならない

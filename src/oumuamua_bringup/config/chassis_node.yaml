@@ -24,6 +24,8 @@ chassis_node:
       # mini-shirasu は encoder_cpr で駆動軸 (ホイール) 基準にしてあるので減速比は掛けない。
       # 付け向きで正転が逆になる車輪は -1.0 にする
       gear_ratio: [1.0, 1.0, 1.0]
+      # 各車輪の実測 (mini_shirasu_node の ~/joint_state)。車輪オドメトリ (~/body_velocity) に使う
+      feedback_topic: [/wheel0/joint_state, /wheel1/joint_state, /wheel2/joint_state]
 
     cmd_timeout: 0.2
     limits:
