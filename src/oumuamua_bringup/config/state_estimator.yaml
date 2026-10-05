@@ -6,3 +6,8 @@ state_estimator:
     field_frame: field
     base_frame: base_link
     lidar_frame: laser
+
+    filter:
+      # sotoba の推定が予測から 5 sigma 以上外れたら捨てる (傾いた LiDAR での誤対応対策)。
+      # 続けて捨てると inflate_after_failures で不確かさを足すので、張り付いたままにはならない
+      gate_sigma: 5.0

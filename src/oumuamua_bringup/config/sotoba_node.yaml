@@ -12,3 +12,9 @@
     # 注意: sotoba の start_x / start_y / start_yaw / lidar_height / lidar_upside_down は
     # 「LiDAR の」初期姿勢と取付。base_link ではない。
     # launch 引数 lidar_z / lidar_upside_down と食い違わないようにすること
+
+    # --- 外れ値対策 (LiDAR が振動で傾き、壁を越えた点や床の点が混ざる場合) ---
+    # oumuamua_sim の tilt.amplitude で比較して決めた値。README の「LiDAR の傾きへの対策」参照
+    huber_k: 2.0                 # 正規化残差 2 (sigma_range 0.03 なら 6cm) を超える点の重みを下げる
+    accept_distance_begin: 0.3   # 対応付けのゲートを初回から狭める (事前が良いので広く探さなくてよい)
+    ray_gate: 0.1                # 事前の姿勢での予測距離と 0.1m 以上違う点を捨てる
