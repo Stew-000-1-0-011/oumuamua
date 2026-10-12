@@ -5,3 +5,6 @@ log/
 
 # rosbag
 rosbag2_*/
+
+# 実機の走行記録 (ros2 bag record -o runN)
+run*/
