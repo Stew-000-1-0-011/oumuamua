@@ -1,7 +1,7 @@
 # sotoba_node の上書き。sotoba_ros の config/sotoba_node.yaml の後に読む。
-# prior_source と publish_tf は bringup.launch.py が estimator 引数で決める:
-#   estimator:=true  -> prior_source: external (state_estimator の事前)、TF は state_estimator が出す
-#   estimator:=false -> prior_source: internal (持続予測)、TF field -> base_link を sotoba が出す
+# sotoba_node は予測をしない。事前分布を出すノードと publish_tf は bringup.launch.py が estimator 引数で決める:
+#   estimator:=true  -> state_estimator が事前を出す。TF は state_estimator が出す
+#   estimator:=false -> sotoba_ros の persistence_predictor (持続予測) が事前を出す。TF field -> base_link を sotoba が出す
 /**:
   ros__parameters:
     tf_parent_frame: field

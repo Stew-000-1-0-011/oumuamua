@@ -10,7 +10,7 @@ estimator:=true (既定) なら state_estimator が自己位置と速度を推�
 tracker_node には推定 (~/odom) を渡す。速度の入力は velocity_source で選ぶ:
   wheels  (既定): 車輪オドメトリ (chassis_node の ~/body_velocity、sim:=true なら robot_sim の ~/body_velocity)
   cmd_vel        : tracker_node の指令 (下位の速度制御の遅れを cmd_tau で与える)
-estimator:=false なら sotoba_node が持続予測で単体で動き、TF field -> base_link を出す。
+estimator:=false なら sotoba_ros の persistence_predictor (持続予測) が事前分布を出し、sotoba_node が TF field -> base_link を出す。
 
 sim:=true なら、/cmd_vel から先 (足回り・モータドライバ・USB-CAN・LiDAR) の代わりに
 oumuamua_sim の robot_sim を立てる。robot_sim は /cmd_vel で動き、/scan を出す。
@@ -148,11 +148,28 @@ def generate_launch_description():
             NodeParams('sotoba_node', {
                 'lidar_height': LaunchConfiguration('lidar_z'),
                 'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
-                'prior_source': PythonExpression(["'external' if '", estimator, "' == 'true' else 'internal'"]),
                 'publish_tf': not_estimator,
             }),
         ],
         output='screen',
+    )
+    # sotoba_node は予測をしないので、事前分布を出すノードが要る。
+    # estimator:=true なら state_estimator、false なら sotoba_ros の持続予測 (機体の動きは知らない)
+    persistence_predictor = Node(
+        package='sotoba_ros',
+        executable='persistence_predictor',
+        name='persistence_predictor',
+        parameters=[
+            config('sotoba_ros', 'sotoba_node.yaml'),
+            config('oumuamua_bringup', 'sotoba_node.yaml'),
+        ],
+        remappings=[
+            ('posterior_beliefs', '/sotoba_node/posterior_beliefs'),
+            ('prior_beliefs', '/sotoba_node/prior_beliefs'),
+            ('initial_beliefs', '/sotoba_node/initial_beliefs'),
+        ],
+        output='screen',
+        condition=IfCondition(not_estimator),
     )
 
     # --- 状態推定 (state_estimator) ---
@@ -300,7 +317,7 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz', default_value='false', description='RViz2 を起動する'),
         DeclareLaunchArgument(
             'estimator', default_value='true',
-            description='state_estimator で自己位置と速度を推定する。false なら sotoba_node 単体 (持続予測)'),
+            description='state_estimator で自己位置と速度を推定する。false なら sotoba_ros の持続予測で事前を出す'),
         DeclareLaunchArgument(
             'velocity_source', default_value='wheels', choices=['wheels', 'cmd_vel'],
             description='state_estimator の速度入力。wheels: 車輪オドメトリ、cmd_vel: 指令値'),
@@ -315,6 +332,7 @@ def generate_launch_description():
         urg,
         lidar_tf,
         sotoba,
+        persistence_predictor,
         state_estimator,
         tracker,
         chassis,

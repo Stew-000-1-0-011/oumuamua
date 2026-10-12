@@ -8,7 +8,7 @@ sotoba_node と対になって動く。
 - **出力**: 現在の推定を `~/odom` と TF `field -> base_link` に、sotoba_node への事前分布を `prior_beliefs` に出す
 
 事前 -> sotoba -> 事後 -> ここ、と計算が循環する。その中で時刻をまたいで状態を持つのはこのノードだけにしてある
-(sotoba_node は `prior_source: external` なら毎スキャン事前を受けて事後を返すだけ)。
+(sotoba_node は予測をせず、毎スキャン事前を受けて事後を返すだけ)。
 
 ## 構成
 

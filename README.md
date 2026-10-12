@@ -30,8 +30,8 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 state_estimator だけにしてある。リセットは state_estimator の `~/reset` か `/initialpose` (RViz の 2D Pose Estimate) で行う。
 詳しくは `src/state_estimator/README.md`。
 
-`estimator:=false` なら state_estimator を立てず、sotoba_node が持続予測 (`prior_source: internal`) で単体で動いて
-TF `field -> base_link` を出し、tracker_node はそれを使う (前の構成)。
+`estimator:=false` なら state_estimator を立てず、sotoba_ros の persistence_predictor (持続予測。機体の動きは知らない) が
+事前分布を出す。sotoba_node が TF `field -> base_link` を出し、tracker_node はそれを使う。
 
 tracker_node に目標 (`/tracker_node/reference`, `holonomic_tracker/msg/TrackingReference`)
 を出すノードはまだ無い。
