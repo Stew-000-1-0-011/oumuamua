@@ -13,6 +13,7 @@
     can_rx_topic: /robomas_can_rx
     mode: velocity
     enable_on_start: true
+    reset_fault_on_start: true   # 起動時に異常ラッチを解除してから設定する
     control_rate: 50.0
     target_timeout: 0.2
     command_timeout: 0.1
@@ -25,17 +26,17 @@
       # 別のモータや減速比で使うなら、bench.rs のコメントを見て決め直すこと
       vdcmax: 24.0            # [V]
       ibase: 10.0             # [A]
-      wbase: 300.0            # [rad/s]
+      wbase: 50.0             # [rad/s] 小さいほど wkp を大きくできる (wkp * wbase / ibase < 8)。速度は 8 * wbase まで扱える
       ke: 0.09                # [V/(rad/s)] 駆動軸基準。少し小さめ
       ckp: 0.02               # [V/A] 電気的時定数が短いので比例は小さく、積分で追従させる
       cki: 600.0              # [V/(A s)]
       dead_duty: 0.0
       i_threshold: 0.5        # [A]
       duty_max: 0.95
-      vmax: 4.0               # [V] 電流の読みが外れても電流が上がりすぎないよう電圧で抑える
+      vmax: 24.0               # [V] 電流の読みが外れても電流が上がりすぎないよう電圧で抑える
       imax: 8.0               # [A]
-      wkp: 0.1                # [A/(rad/s)]
-      wki: 0.5                # [A/(rad/s s)]
+      wkp: 0.5                # [A/(rad/s)]
+      wki: 2.5                # [A/(rad/s s)]
       wb: 0.8
       wmax: 20.0              # [rad/s]
       pkp: 1.5                # [1/s]

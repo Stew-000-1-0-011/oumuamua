@@ -18,3 +18,8 @@
     huber_k: 2.0                 # 正規化残差 2 (sigma_range 0.03 なら 6cm) を超える点の重みを下げる
     accept_distance_begin: 0.3   # 対応付けのゲートを初回から狭める (事前が良いので広く探さなくてよい)
     ray_gate: 0.1                # 事前の姿勢での予測距離と 0.1m 以上違う点を捨てる
+
+    # 初期姿勢 (フィールド座標系、LiDAR の姿勢)。位置は sotoba_ros の既定と同じで、向きだけ +x に向ける
+    start_x: 0.021
+    start_y: 0.444
+    start_yaw: 0.0

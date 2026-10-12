@@ -237,7 +237,7 @@ def generate_launch_description():
                 name='robomas_bridge',
             ),
         ],
-        output='screen',
+        # output='none',
         condition=IfCondition(PythonExpression(["'", bridge, "' == 'true' and '", sim, "' != 'true'"])),
     )
 

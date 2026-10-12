@@ -8,3 +8,4 @@ tracker_node:
     odom_topic: /state_estimator/odom
     cmd_vel_topic: /cmd_vel
     cmd_vel_stamped: true       # state_estimator の速度入力に cmd_vel をつなぐこともあるので時刻付き
+    limits.max_velocity_linear: 2.0
