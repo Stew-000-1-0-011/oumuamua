@@ -46,7 +46,8 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | --- | --- | --- |
 | `lidar` | `true` | urg_node2 を起動する (configure -> activate まで自動) |
 | `lidar_connection` | `ether` | `ether` / `serial`。`config/urg_<...>.yaml` を使う |
-| `lidar_x`, `lidar_y`, `lidar_yaw` | `0.0` | base_link から見た LiDAR の取付 (static TF `base_link -> laser`) |
+| `lidar_x` | `0.28` | base_link から見た LiDAR の取付位置 [m] (static TF `base_link -> laser`)。正面の車輪 0 の 8 cm 先 |
+| `lidar_y`, `lidar_yaw` | `0.0` | 同上 (横方向の位置と向き) |
 | `lidar_z` | `0.14` | 走査面の高さ [m]。sotoba_node の `lidar_height` にも渡す |
 | `lidar_upside_down` | `true` | 逆さ付けか。TF の roll と sotoba_node の同名パラメータに渡す |
 | `chassis_params` | `config/chassis_node.yaml` | chassis_node のパラメータ |

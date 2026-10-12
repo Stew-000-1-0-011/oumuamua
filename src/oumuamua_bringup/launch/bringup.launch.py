@@ -295,7 +295,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'lidar_connection', default_value='ether', choices=['ether', 'serial'],
             description='LiDAR の接続 (config/urg_<ether|serial>.yaml を使う)'),
-        DeclareLaunchArgument('lidar_x', default_value='0.0', description='base_link から見た LiDAR の位置 [m]'),
+        DeclareLaunchArgument(
+            'lidar_x', default_value='0.28',
+            description='base_link から見た LiDAR の位置 [m]。正面の車輪 0 (中心から 0.20 m) の 8 cm 先'),
         DeclareLaunchArgument('lidar_y', default_value='0.0', description='base_link から見た LiDAR の位置 [m]'),
         DeclareLaunchArgument(
             'lidar_z', default_value='0.14',

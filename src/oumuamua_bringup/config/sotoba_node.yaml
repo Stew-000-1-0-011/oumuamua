@@ -13,13 +13,23 @@
     # 「LiDAR の」初期姿勢と取付。base_link ではない。
     # launch 引数 lidar_z / lidar_upside_down と食い違わないようにすること
 
+    # ノーツは推定対象に入れない (フィールドだけ)。実物のノーツに当たった点はモデルに無い点として扱われ、
+    # 下の外れ値対策 (huber_k / ray_gate) で落ちる。sim:=true の robot_sim も同じ値を読むので、模擬側にもノーツは出ない
+    include_notes: false
+    # ビンゴ棚も形状に入れない。実機の走行記録 (2026-10-12 run1) で、棚の前では推定が 16 cm ほどずれ、
+    # 離れると 18 cm 飛んで戻っていた。棚は箱で近似してあるが、実物は奥まで見えていて合っていない。
+    # (robot_sim はこの値を読まないので、模擬の世界には箱の棚が残る = モデルに無い物として映る)
+    include_shelf: false
+
     # --- 外れ値対策 (LiDAR が振動で傾き、壁を越えた点や床の点が混ざる場合) ---
     # oumuamua_sim の tilt.amplitude で比較して決めた値。README の「LiDAR の傾きへの対策」参照
     huber_k: 2.0                 # 正規化残差 2 (sigma_range 0.03 なら 6cm) を超える点の重みを下げる
     accept_distance_begin: 0.3   # 対応付けのゲートを初回から狭める (事前が良いので広く探さなくてよい)
     ray_gate: 0.1                # 事前の姿勢での予測距離と 0.1m 以上違う点を捨てる
 
-    # 初期姿勢 (フィールド座標系、LiDAR の姿勢)。位置は sotoba_ros の既定と同じで、向きだけ +x に向ける
-    start_x: 0.021
-    start_y: 0.444
+    # 初期姿勢 (フィールド座標系)。**LiDAR の姿勢**で、機体中心 (base_link) ではない。
+    # 機体中心を経路の始点 (config/paths/start_to_shelf.route.yaml の corners の先頭、(-2.2, 1.3)) に
+    # +x (ビンゴ側) 向きで置いたとき、LiDAR はその 0.28 m 前 (launch 引数 lidar_x) にある
+    start_x: -1.92
+    start_y: 1.3
     start_yaw: 0.0
