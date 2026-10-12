@@ -36,8 +36,10 @@ robot_sim:
     # --- 運動 (実行中に変えられる) ---
     cmd_timeout: 0.2           # [s] cmd_vel がこれより来なければ止まる
     plant:
-      tau_linear: 0.1          # [s] cmd_vel への追従の時定数
-      tau_angular: 0.1
+      # cmd_vel への追従の時定数 [s]。実機の走行記録 (2026-10-12 run1) で、指令に対する車輪オドメトリの
+      # 遅れが並進 0.27 s、旋回 0.13 s だったので、それに合わせてある
+      tau_linear: 0.27
+      tau_angular: 0.13
       max_accel_linear: 0.0    # [m/s^2] <= 0 で無効
       max_accel_angular: 0.0   # [rad/s^2]
       velocity_scale_linear: 1.0   # 実際に出る速度 / 指令 (滑りの模擬)

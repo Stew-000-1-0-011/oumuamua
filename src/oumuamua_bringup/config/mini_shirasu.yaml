@@ -26,7 +26,7 @@
       # 別のモータや減速比で使うなら、bench.rs のコメントを見て決め直すこと
       vdcmax: 24.0            # [V]
       ibase: 10.0             # [A]
-      wbase: 50.0             # [rad/s] 小さいほど wkp を大きくできる (wkp * wbase / ibase < 8)。速度は 8 * wbase まで扱える
+      wbase: 40.0             # [rad/s] 小さいほど wkp を大きくできる (wkp * wbase / ibase < 8)。速度は 8 * wbase まで扱える
       ke: 0.09                # [V/(rad/s)] 駆動軸基準。少し小さめ
       ckp: 0.02               # [V/A] 電気的時定数が短いので比例は小さく、積分で追従させる
       cki: 600.0              # [V/(A s)]
@@ -35,10 +35,10 @@
       duty_max: 0.95
       vmax: 24.0               # [V] 電流の読みが外れても電流が上がりすぎないよう電圧で抑える
       imax: 8.0               # [A]
-      wkp: 0.5                # [A/(rad/s)]
-      wki: 2.5                # [A/(rad/s s)]
+      wkp: 1.6                # [A/(rad/s)]
+      wki: 5.0                # [A/(rad/s s)]
       wb: 0.8
-      wmax: 20.0              # [rad/s]
+      wmax: 40.0              # [rad/s] 車輪半径 0.029 m で約 1.16 m/s。chassis_node.yaml の max_wheel_speed と揃える
       pkp: 1.5                # [1/s]
       pmax: 100.0             # [回転]
       accel_to_current: 0.01  # [A/(rad/s^2)]
