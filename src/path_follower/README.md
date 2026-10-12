@@ -1,0 +1,83 @@
+# path_follower
+
+起動前に作った経路ファイルを読み、速度計画を付けて、軌道追従ノード
+([holonomic_tracker](https://github.com/Stew-000-1-0-011/holonomic_tracker) の tracker_node) に時刻ごとの目標を出すノード。
+経路ファイルを作るスクリプトも入っている。
+
+- **経路を作る** (起動前): `scripts/make_path.py` が、経路の定義 (折れ線の頂点・角を丸める半径・機体の向き) から経路ファイルを作る
+- **走る** (実行時): `path_follower_node` が経路ファイルを読み、`~/start/<経路の名前>` で始点から走り出して、目標を `reference_topic` に出す
+
+## 構成
+
+| ファイル | 役割 |
+| --- | --- |
+| `scripts/make_path.py` | 経路の定義 (YAML) -> 経路ファイル (CSV)。障害物との間隔の確認と図も出せる |
+| `include/path_follower/trajectory.hpp`, `src/trajectory.cpp` | 経路ファイルの読み込みと速度計画。ROS非依存 |
+| `src/path_follower_node.cpp` | ノード本体 |
+| `config/path_follower.yaml` | パラメータ |
+| `test/trajectory_test.cpp` | 速度計画のテスト (ROS不要) |
+
+## 経路を作る
+
+```bash
+ros2 run path_follower make_path.py route.yaml path.csv --plot preview.png
+ros2 run path_follower make_path.py route.yaml path_back.csv --reverse   # 同じ経路を逆にたどる
+```
+
+経路の定義の書き方は `make_path.py --help` と、oumuamua_bringup の `config/paths/start_to_shelf.route.yaml` を参照。
+
+- `corners`: 折れ線の頂点 `[x, y, 半径]`。角は半径の円弧で丸める
+- `yaw`: 始点からの道のり [m] と、そこでの機体の向き [rad]。全方向移動なので、向きは進む向きと無関係に決められる。
+  間は滑らかにつなぐ。その場での旋回 (位置を変えずに向きだけ変える) は書けない
+- `follow_heading`: 道のり `from` から先は、機体の向きを進む向きに合わせる (それまでは `yaw` のとおり)
+- `obstacles` / `bounds` と、機体の外形 (`footprint` の多角形か `robot_radius` の円): 書いておくと、
+  外形から障害物までの最小の間隔を出す (機体の向きも考える)。`min_clearance` より近ければ失敗して、経路ファイルを作らない
+- `lidar`: LiDAR の取付位置。図にその軌跡を描く
+- `--reverse`: 同じ経路を終点から始点へたどる経路ファイルを作る。各点での機体の向きは同じなので、
+  行きで前を向いて通った所を、帰りは後ろ向きに通る
+
+経路ファイルは 1 行に `x, y, yaw` (フィールド座標系、yaw は ±pi で折り返さない) を並べた CSV。
+`#` で始まる行と見出しの行は読み飛ばす。経路ファイルは作ったものをリポジトリに入れておき、定義を変えたら作り直す。
+
+## 走らせる
+
+```bash
+ros2 run path_follower path_follower_node --ros-args --params-file config/path_follower.yaml -p path_file:=/path/to/path.csv
+ros2 service call /path_follower/start std_srvs/srv/Trigger    # 走り出す
+ros2 service call /path_follower/stop std_srvs/srv/Trigger     # 目標を出すのをやめる (追従ノードが止める)
+```
+
+経路は複数持てる。`path_dir` に置いた `<名前>.csv` を `paths` に並べると、経路ごとに `~/start/<名前>` ができる
+(`~/start` は最初の経路)。走っている途中で別の経路を始めると、その経路の始点から走り直す。
+
+| 方向 | 名前 | 型 |
+| --- | --- | --- |
+| pub | `reference_topic` (既定 `/tracker_node/reference`) | `holonomic_tracker/msg/TrackingReference` (位置・向き・速度FF) |
+| pub | `~/path` | `nav_msgs/msg/Path` (最後に走り出した経路。RViz 用、transient local) |
+| sub | `odom_topic` (既定 `/state_estimator/odom`) | `nav_msgs/msg/Odometry` (自己位置) |
+| srv | `~/start/<名前>`, `~/start` | `std_srvs/srv/Trigger` (その経路の始点から走り出す。`~/start` は最初の経路) |
+| srv | `~/stop` | `std_srvs/srv/Trigger` |
+
+### 速度計画
+
+経路の各点で許される速さを、最高速 (`limits.max_speed`)、横加速度 (`limits.max_lateral_accel`、曲率から)、
+角速度 (`limits.max_yaw_rate`、道のりあたりの向きの変化から) の一番厳しいもので決め、
+両端で止まるように前後から加減速 (`limits.max_accel`) の上限をかける。曲がり角と、向きを変える区間で自動的に遅くなる。
+
+### 安全のための動き
+
+- **始点の確認**: `~/start` のとき、機体が経路の始点から `start_tolerance` より離れていたら走り出さない
+  (離れたまま始めると、追従ノードが始点へ一気に寄せようとする)。自己位置が来ていないときも走り出さない
+- **機体を待つ**: 機体が目標から `max_tracking_error` より離れたら、追いつくまで目標を進めない。
+  何かに引っかかったときに、目標だけが先へ行って追従ノードが全力で追いかけるのを防ぐ
+- **終点**: 着いた後も終点を出し続けて、そこに留まる (`hold_at_goal`)。`~/stop` でやめる
+
+障害物は見ていない。経路が壁に当たらないことは、経路を作るときに確かめておくこと。
+
+## テスト
+
+```bash
+colcon test --packages-select path_follower && colcon test-result --verbose
+```
+
+台形・三角形の速度計画、曲がり角での減速、角速度の上限、両端で止まること、経路ファイルの読み込みを確認する。

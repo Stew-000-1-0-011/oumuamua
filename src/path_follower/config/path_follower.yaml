@@ -1,0 +1,28 @@
+# path_follower のパラメータ。どれも起動時にだけ読む。
+path_follower:
+  ros__parameters:
+    # 経路ファイル (CSV: x, y, yaw。フィールド座標系)。scripts/make_path.py で作る。
+    # path_dir の下の <名前>.csv を paths に並べる。経路ごとに ~/start/<名前> ができ、~/start は最初の経路。
+    # 経路が 1 つだけなら path_file にファイルを書いてもよい (名前はファイル名から)
+    path_dir: ""
+    paths: [""]
+    path_file: ""
+    reference_topic: /tracker_node/reference   # 追従ノードへの目標 (holonomic_tracker/msg/TrackingReference)
+    odom_topic: /state_estimator/odom          # 自己位置 (始点の確認と、機体の遅れを見るのに使う)
+    frame_id: field
+    rate: 50.0                                 # [Hz] 目標を出す周期
+
+    # 速度計画の上限。この範囲でできるだけ速く走り、両端で止まる
+    limits:
+      max_speed: 0.5           # [m/s]
+      max_accel: 1.0           # [m/s^2] 進む向きの加減速
+      max_lateral_accel: 1.0   # [m/s^2] 曲がるときの横加速度。小さいほど曲がり角で遅くなる
+      max_yaw_rate: 1.5        # [rad/s]
+
+    # ~/start のとき、機体が経路の始点からこれより離れていたら始めない [m]。0 以下で確認しない
+    start_tolerance: 0.15
+    # 機体が目標からこれより離れたら、追いつくまで目標を進めない [m]。0 以下で待たない
+    max_tracking_error: 0.15
+    odom_timeout: 0.5          # [s] 自己位置がこれより古ければ「無い」とみなす
+    hold_at_goal: true         # 終点に着いた後も終点を出し続けて、そこに留まる
+    auto_start: false          # true なら ~/start を待たずに走り出す (始点の確認はしない)

@@ -13,6 +13,7 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 | `src/oumuamua_bringup` | 上をまとめて起動する launch と、この機体のパラメータ |
 | `src/oumuamua_sim` | `/cmd_vel` から先のシミュレータ (平面運動と 2D LiDAR) |
 | `src/state_estimator` | 自己位置と機体速度の推定。sotoba_node と対になって事前分布を渡す |
+| `src/path_follower` | 起動前に作った経路ファイルを読み、速度計画を付けて tracker_node に目標を出す。経路ファイルを作るスクリプト付き |
 
 ## つながり
 
@@ -33,8 +34,28 @@ state_estimator だけにしてある。リセットは state_estimator の `~/r
 `estimator:=false` なら state_estimator を立てず、sotoba_ros の persistence_predictor (持続予測。機体の動きは知らない) が
 事前分布を出す。sotoba_node が TF `field -> base_link` を出し、tracker_node はそれを使う。
 
-tracker_node に目標 (`/tracker_node/reference`, `holonomic_tracker/msg/TrackingReference`)
-を出すノードはまだ無い。
+tracker_node への目標 (`/tracker_node/reference`, `holonomic_tracker/msg/TrackingReference`) は path_follower が出す。
+起動しただけでは走らない。経路の始点に置いて、次で走り出す:
+
+```bash
+ros2 service call /path_follower/start/start_to_shelf std_srvs/srv/Trigger   # スタート位置 -> 棚の正面
+ros2 service call /path_follower/start/shelf_to_start std_srvs/srv/Trigger   # 棚の正面 -> スタート位置
+ros2 service call /path_follower/stop std_srvs/srv/Trigger                   # 目標を止める (tracker_node が機体を止める)
+```
+
+経路は `src/oumuamua_bringup/config/paths/` にある。`start_to_shelf.route.yaml` が定義で、そこから
+行き (`start_to_shelf.csv`) と帰り (`shelf_to_start.csv`。同じ経路を逆にたどる) を作ってある。定義を変えたら両方作り直す:
+
+```bash
+cd src/oumuamua_bringup/config/paths
+ros2 run path_follower make_path.py start_to_shelf.route.yaml start_to_shelf.csv --plot /tmp/preview.png
+ros2 run path_follower make_path.py start_to_shelf.route.yaml shelf_to_start.csv --reverse
+```
+
+定義にはフィールドの壁と機体の外形 (半径 0.30 m の円 + 正面に飛び出した LiDAR) も書いてあり、
+外形が壁に `min_clearance` より近づく経路は作るのに失敗する。機体の向きは、最初の隙間から先は進む向きに合わせてある
+(帰りは同じ向きのまま逆にたどるので、後ろ向きに走る)。どの経路を読むかは `config/path_follower.yaml` の `paths`。
+速さの上限は `config/path_follower.yaml`。詳しくは `src/path_follower/README.md`。
 
 ## 起動
 
@@ -56,7 +77,8 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `bridge` | `true` | robomas_bridge (USB-CAN) を起動する |
 | `rviz` | `false` | RViz2 を起動する |
 | `sim` | `false` | `/cmd_vel` から先をシミュレータにする (下の「シミュレーション」) |
-| `estimator` | `true` | state_estimator を使う。`false` なら sotoba_node 単体 |
+| `path_dir` | `config/paths` | path_follower の経路ファイルを置いた場所 (どれを読むかは `path_follower.yaml` の `paths`) |
+| `estimator` | `true` | state_estimator を使う。`false` なら sotoba_ros の持続予測で事前を出す |
 | `velocity_source` | `wheels` | state_estimator の速度入力。`wheels`: 車輪オドメトリ (`sim:=true` なら robot_sim の模擬)、`cmd_vel`: 指令値 |
 | `cmd_tau` | `0.1` | `velocity_source:=cmd_vel` のときの、指令への追従の時定数 [s] |
 

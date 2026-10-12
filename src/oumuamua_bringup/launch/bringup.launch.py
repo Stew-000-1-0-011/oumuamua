@@ -214,6 +214,23 @@ def generate_launch_description():
         output='screen',
     )
 
+    # --- 経路 (path_follower)。起動しただけでは走らない。~/start で経路の始点から走り出す ---
+    path_follower = Node(
+        package='path_follower',
+        executable='path_follower_node',
+        name='path_follower',
+        parameters=[
+            config('path_follower', 'path_follower.yaml'),
+            config('oumuamua_bringup', 'path_follower.yaml'),
+            NodeParams('path_follower', {
+                'path_dir': LaunchConfiguration('path_dir'),
+                'odom_topic': PythonExpression(
+                    ["'/state_estimator/odom' if '", estimator, "' == 'true' else '/tracker_node/odom'"]),
+            }),
+        ],
+        output='screen',
+    )
+
     # --- 足回り (omni_chassis) ---
     chassis = Node(
         package='omni_chassis',
@@ -327,6 +344,10 @@ def generate_launch_description():
             'cmd_tau', default_value='0.1',
             description='velocity_source:=cmd_vel のときの、指令への追従の時定数 [s]'),
         DeclareLaunchArgument(
+            'path_dir',
+            default_value=PathJoinSubstitution([FindPackageShare('oumuamua_bringup'), 'config', 'paths']),
+            description='path_follower の経路ファイル (make_path.py で作った CSV) を置いた場所。どれを読むかは path_follower.yaml の paths'),
+        DeclareLaunchArgument(
             'sim', default_value='false',
             description='/cmd_vel から先を oumuamua_sim で模擬する (LiDAR・足回り・ドライバ・USB-CAN は立てない)'),
         urg_configure,
@@ -337,6 +358,7 @@ def generate_launch_description():
         persistence_predictor,
         state_estimator,
         tracker,
+        path_follower,
         chassis,
         wheels,
         robomas,

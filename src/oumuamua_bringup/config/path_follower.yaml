@@ -1,0 +1,16 @@
+# path_follower の上書き。path_follower の config/path_follower.yaml の後に読む。
+# 経路ファイルの場所 (path_dir = config/paths) と自己位置のトピック (odom_topic) は bringup.launch.py が決める。
+path_follower:
+  ros__parameters:
+    # config/paths の下の経路。~/start/<名前> で走り出す (~/start は最初の経路)
+    paths: [start_to_shelf, shelf_to_start]
+
+    # 実機で走らせて決めた値 (2026-10-12)。壁には当たらずに走れている。
+    # 所要時間はほぼ曲がり角の速さ (max_lateral_accel と max_yaw_rate の厳しいほう) で決まる。
+    # 直線が短いので、max_speed は上げても長い直線 1 か所でしか効かない。
+    # 足回りが指令に約 0.18 s 遅れて付いてくるぶん、速いほど曲がり角を内側へ切る。上げるときは走行を記録して壁との間隔を見ること
+    limits:
+      max_speed: 2.0           # [m/s]
+      max_accel: 1.0           # [m/s^2]
+      max_lateral_accel: 1.5   # [m/s^2] 半径 0.30 m の角を 0.67 m/s で回る
+      max_yaw_rate: 2.5        # [rad/s]
