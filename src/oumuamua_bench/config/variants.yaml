@@ -18,3 +18,9 @@ gicp:
 gicp_est:
   description: gicp_localizer の推定を state_estimator の観測にする
   launch_args: [localization:=gicp, estimator:=true]
+nav2_follow:
+  description: Nav2 (MPPI) が経路ファイルの経路をそのまま追従。自己位置は AMCL
+  launch_args: [localization:=amcl, estimator:=false, navigation:=nav2, nav2_mode:=follow_path]
+nav2_poses:
+  description: Nav2 が間引いた姿勢を通る経路を地図から引き直して追従 (NavigateThroughPoses)。自己位置は AMCL
+  launch_args: [localization:=amcl, estimator:=false, navigation:=nav2, nav2_mode:=through_poses]

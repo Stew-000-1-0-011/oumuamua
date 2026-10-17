@@ -1,0 +1,248 @@
+# navigation:=nav2 のときの Nav2 (cmd_vel より前をすべて Nav2 にする)。
+# 自己位置は AMCL (config/amcl.yaml)、オドメトリは body_odometry。
+# 経路は nav2_path_driver が path_follower と同じ経路ファイルから渡す (mode: follow_path / through_poses)。
+# 速さの上限は path_follower.yaml の limits に合わせてある (直線 2.0 m/s、加速度 1.0 m/s^2、角速度 2.5 rad/s)。
+# 機体の外形は経路の定義 (config/paths/start_to_shelf.route.yaml の footprint) と同じ。
+
+bt_navigator:
+  ros__parameters:
+    global_frame: field
+    robot_base_frame: base_link
+    odom_topic: /odom
+    bt_loop_duration: 10
+    default_server_timeout: 20
+    navigators: [navigate_to_pose, navigate_through_poses]
+    navigate_to_pose:
+      plugin: nav2_bt_navigator::NavigateToPoseNavigator
+    navigate_through_poses:
+      plugin: nav2_bt_navigator::NavigateThroughPosesNavigator
+
+controller_server:
+  ros__parameters:
+    controller_frequency: 20.0
+    costmap_update_timeout: 0.30
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 0.3
+    odom_topic: /odom
+    progress_checker_plugins: [progress_checker]
+    goal_checker_plugins: [general_goal_checker]
+    controller_plugins: [FollowPath]
+    path_handler_plugins: [PathHandler]
+    progress_checker:
+      plugin: nav2_controller::SimpleProgressChecker
+      required_movement_radius: 0.3
+      movement_time_allowance: 10.0
+    # bench は終点から 5 cm 以内に入ったら着いたとみなすので、それより狭くする
+    general_goal_checker:
+      plugin: nav2_controller::SimpleGoalChecker
+      stateful: true
+      xy_goal_tolerance: 0.03
+      yaw_goal_tolerance: 0.05
+    PathHandler:
+      plugin: nav2_controller::FeasiblePathHandler
+      prune_distance: 2.0
+      enforce_path_inversion: false
+      enforce_path_rotation: false
+    FollowPath:
+      plugin: nav2_mppi_controller::MPPIController
+      time_steps: 56
+      model_dt: 0.05
+      batch_size: 2000
+      iteration_count: 1
+      temperature: 0.3
+      gamma: 0.015
+      motion_model: Omni
+      Omni:
+        plugin: mppi::OmniMotionModel
+      vx_max: 2.0
+      vx_min: -2.0
+      vy_max: 2.0
+      wz_max: 2.5
+      ax_max: 1.0
+      ax_min: -1.0
+      ay_max: 1.0
+      ay_min: -1.0
+      az_max: 3.5
+      vx_std: 0.2
+      vy_std: 0.2
+      wz_std: 0.4
+      visualize: false
+      regenerate_noises: true
+      TrajectoryValidator:
+        plugin: mppi::DefaultOptimalTrajectoryValidator
+        collision_lookahead_time: 2.0
+        consider_footprint: true
+      critics: [ConstraintCritic, CostCritic, GoalCritic, GoalAngleCritic, PathAlignCritic, PathFollowCritic, PathAngleCritic]
+      ConstraintCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 4.0
+      GoalCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        threshold_to_consider: 1.4
+      GoalAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.0
+        threshold_to_consider: 0.5
+      CostCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.81
+        near_collision_cost: 253
+        critical_cost: 300.0
+        consider_footprint: true
+        collision_cost: 1000000.0
+        near_goal_distance: 0.5
+        trajectory_point_step: 2
+      PathAlignCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 14.0
+        max_path_occupancy_ratio: 0.05
+        trajectory_point_step: 4
+        threshold_to_consider: 0.5
+        offset_from_furthest: 20
+        # 経路の各点の向き (全方向移動なので進む向きとは別) に合わせる
+        use_path_orientations: true
+      PathFollowCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 5.0
+        offset_from_furthest: 5
+        threshold_to_consider: 1.4
+      PathAngleCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 2.0
+        offset_from_furthest: 4
+        threshold_to_consider: 0.5
+        max_angle_to_furthest: 1.0
+        # 2: 経路の向きに合わせる (全方向移動)
+        mode: 2
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 10.0
+      publish_frequency: 2.0
+      global_frame: odom
+      robot_base_frame: base_link
+      rolling_window: true
+      width: 3
+      height: 3
+      resolution: 0.02
+      footprint: "[[0.315, -0.035], [0.315, 0.035], [0.298, 0.035], [0.289, 0.080], [0.274, 0.122], [0.253, 0.162], [0.225, 0.198], [0.193, 0.230], [0.156, 0.256], [0.116, 0.277], [0.072, 0.291], [0.028, 0.299], [-0.018, 0.299], [-0.062, 0.293], [-0.106, 0.281], [-0.147, 0.262], [-0.185, 0.236], [-0.218, 0.206], [-0.247, 0.171], [-0.270, 0.132], [-0.286, 0.089], [-0.297, 0.045], [-0.300, 0.000], [-0.297, -0.045], [-0.286, -0.089], [-0.270, -0.132], [-0.247, -0.171], [-0.218, -0.206], [-0.185, -0.236], [-0.147, -0.262], [-0.106, -0.281], [-0.062, -0.293], [-0.018, -0.299], [0.028, -0.299], [0.072, -0.291], [0.116, -0.277], [0.156, -0.256], [0.193, -0.230], [0.225, -0.198], [0.253, -0.162], [0.274, -0.122], [0.289, -0.080], [0.298, -0.035]]"
+      plugins: [obstacle_layer, inflation_layer]
+      obstacle_layer:
+        plugin: nav2_costmap_2d::ObstacleLayer
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: LaserScan
+          clearing: true
+          marking: true
+          max_obstacle_height: 2.0
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+      # フィールドの通路は 0.8 m 幅しかないので、コストを急に減らす (cost_scaling_factor を大きく)。
+      # 半径は機体の外接円 (0.33 m) 以上でないと、MPPI が外形での衝突判定をできない
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+        cost_scaling_factor: 10.0
+        inflation_radius: 0.35
+      always_send_full_costmap: true
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 1.0
+      publish_frequency: 1.0
+      global_frame: field
+      robot_base_frame: base_link
+      resolution: 0.02
+      footprint: "[[0.315, -0.035], [0.315, 0.035], [0.298, 0.035], [0.289, 0.080], [0.274, 0.122], [0.253, 0.162], [0.225, 0.198], [0.193, 0.230], [0.156, 0.256], [0.116, 0.277], [0.072, 0.291], [0.028, 0.299], [-0.018, 0.299], [-0.062, 0.293], [-0.106, 0.281], [-0.147, 0.262], [-0.185, 0.236], [-0.218, 0.206], [-0.247, 0.171], [-0.270, 0.132], [-0.286, 0.089], [-0.297, 0.045], [-0.300, 0.000], [-0.297, -0.045], [-0.286, -0.089], [-0.270, -0.132], [-0.247, -0.171], [-0.218, -0.206], [-0.185, -0.236], [-0.147, -0.262], [-0.106, -0.281], [-0.062, -0.293], [-0.018, -0.299], [0.028, -0.299], [0.072, -0.291], [0.116, -0.277], [0.156, -0.256], [0.193, -0.230], [0.225, -0.198], [0.253, -0.162], [0.274, -0.122], [0.289, -0.080], [0.298, -0.035]]"
+      track_unknown_space: false
+      plugins: [static_layer, obstacle_layer, inflation_layer]
+      static_layer:
+        plugin: nav2_costmap_2d::StaticLayer
+        map_topic: /map
+        map_subscribe_transient_local: true
+      obstacle_layer:
+        plugin: nav2_costmap_2d::ObstacleLayer
+        enabled: true
+        observation_sources: scan
+        scan:
+          topic: /scan
+          data_type: LaserScan
+          clearing: true
+          marking: true
+          max_obstacle_height: 2.0
+          raytrace_max_range: 3.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 2.5
+          obstacle_min_range: 0.0
+      inflation_layer:
+        plugin: nav2_costmap_2d::InflationLayer
+        cost_scaling_factor: 10.0
+        inflation_radius: 0.35
+      always_send_full_costmap: true
+
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 20.0
+    planner_plugins: [GridBased]
+    costmap_update_timeout: 1.0
+    GridBased:
+      plugin: nav2_smac_planner::SmacPlanner2D
+      tolerance: 0.05
+      downsample_costmap: false
+      allow_unknown: false
+      max_planning_time: 1.0
+      cost_travel_multiplier: 2.0
+      use_final_approach_orientation: false
+
+behavior_server:
+  ros__parameters:
+    local_costmap_topic: local_costmap/costmap_raw
+    global_costmap_topic: global_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_footprint_topic: global_costmap/published_footprint
+    cycle_frequency: 10.0
+    behavior_plugins: [spin, backup, wait]
+    spin:
+      plugin: nav2_behaviors::Spin
+    backup:
+      plugin: nav2_behaviors::BackUp
+    wait:
+      plugin: nav2_behaviors::Wait
+    local_frame: odom
+    global_frame: field
+    robot_base_frame: base_link
+    transform_tolerance: 0.1
+
+velocity_smoother:
+  ros__parameters:
+    smoothing_frequency: 20.0
+    scale_velocities: false
+    feedback: OPEN_LOOP
+    max_velocity: [2.0, 2.0, 2.5]
+    min_velocity: [-2.0, -2.0, -2.5]
+    max_accel: [1.0, 1.0, 3.5]
+    max_decel: [-1.0, -1.0, -3.5]
+    odom_topic: /odom
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
+
+lifecycle_manager_navigation:
+  ros__parameters:
+    autostart: true
+    node_names: [controller_server, planner_server, behavior_server, bt_navigator, velocity_smoother]
+    bond_timeout: 0.0

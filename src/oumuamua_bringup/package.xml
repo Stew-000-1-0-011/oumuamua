@@ -32,6 +32,16 @@
   <exec_depend>nav2_lifecycle_manager</exec_depend>
   <!-- localization:=gicp -->
   <exec_depend>gicp_localizer</exec_depend>
+  <!-- navigation:=nav2 -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
+  <exec_depend>nav2_controller</exec_depend>
+  <exec_depend>nav2_planner</exec_depend>
+  <exec_depend>nav2_behaviors</exec_depend>
+  <exec_depend>nav2_bt_navigator</exec_depend>
+  <exec_depend>nav2_velocity_smoother</exec_depend>
+  <exec_depend>nav2_mppi_controller</exec_depend>
+  <exec_depend>nav2_smac_planner</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -20,6 +20,12 @@ localization で自己位置推定のやり方を選ぶ:
                  odom とTF・estimator の扱いは amcl と同じ (推定は /gicp_localizer/pose)
 estimator:=false (localization:=sotoba) なら sotoba_ros の persistence_predictor (持続予測) が事前分布を出し、sotoba_node が TF field -> base_link を出す。
 
+navigation で cmd_vel より前 (経路の追従) のやり方を選ぶ:
+  tracker (既定): path_follower + tracker_node (holonomic_tracker)
+  nav2          : Nav2 (controller_server (MPPI)・planner_server・bt_navigator・velocity_smoother など、config/nav2.yaml)。
+                  path_follower の代わりに nav2_path_driver が同じ経路ファイルを Nav2 に渡す (nav2_mode)。
+                  odom フレームが要るので localization:=amcl か gicp と組み合わせる
+
 sim:=true なら、/cmd_vel から先 (足回り・モータドライバ・USB-CAN・LiDAR) の代わりに
 oumuamua_sim の robot_sim を立てる。robot_sim は /cmd_vel で動き、/scan を出す。
 """
@@ -88,6 +94,8 @@ def generate_launch_description():
     estimator = LaunchConfiguration('estimator')
     velocity_source = LaunchConfiguration('velocity_source')
     localization = LaunchConfiguration('localization')
+    navigation = LaunchConfiguration('navigation')
+    use_tracker = IfCondition(PythonExpression(["'", navigation, "' == 'tracker'"]))
     use_sotoba = IfCondition(PythonExpression(["'", localization, "' == 'sotoba'"]))
     use_amcl = IfCondition(PythonExpression(["'", localization, "' == 'amcl'"]))
     # 機体 (base_link) の初期姿勢。sotoba 以外の自己位置推定に渡す
@@ -308,6 +316,7 @@ def generate_launch_description():
             }),
         ],
         output='screen',
+        condition=use_tracker,
     )
 
     # --- 経路 (path_follower)。起動しただけでは走らない。~/start で経路の始点から走り出す ---
@@ -325,7 +334,51 @@ def generate_launch_description():
             }),
         ],
         output='screen',
+        condition=use_tracker,
     )
+
+    # --- navigation:=nav2 ---
+    def make_nav2(context):
+        if navigation.perform(context) != 'nav2':
+            return []
+        if localization.perform(context) not in ('amcl', 'gicp'):
+            raise RuntimeError('navigation:=nav2 needs the odom frame: use localization:=amcl or gicp')
+        nav2_params = config('oumuamua_bringup', 'nav2.yaml')
+
+        def server(package, executable, name=None, remappings=()):
+            return Node(
+                package=package,
+                executable=executable,
+                name=name or executable,
+                parameters=[nav2_params],
+                remappings=list(remappings),
+                output='screen',
+            )
+        return [
+            server('nav2_controller', 'controller_server', remappings=[('cmd_vel', 'cmd_vel_nav')]),
+            server('nav2_planner', 'planner_server'),
+            server('nav2_behaviors', 'behavior_server', remappings=[('cmd_vel', 'cmd_vel_nav')]),
+            server('nav2_bt_navigator', 'bt_navigator'),
+            server('nav2_velocity_smoother', 'velocity_smoother',
+                   remappings=[('cmd_vel', 'cmd_vel_nav'), ('cmd_vel_smoothed', '/cmd_vel')]),
+            server('nav2_lifecycle_manager', 'lifecycle_manager', name='lifecycle_manager_navigation'),
+            # path_follower と同じ名前・サービスで、経路ファイルを Nav2 に渡す
+            Node(
+                package='oumuamua_bringup',
+                executable='nav2_path_driver.py',
+                name='path_follower',
+                parameters=[
+                    config('path_follower', 'path_follower.yaml'),
+                    config('oumuamua_bringup', 'path_follower.yaml'),
+                    NodeParams('path_follower', {
+                        'path_dir': LaunchConfiguration('path_dir'),
+                        'mode': LaunchConfiguration('nav2_mode'),
+                    }),
+                ],
+                output='screen',
+            ),
+        ]
+    nav2 = OpaqueFunction(function=make_nav2)
 
     # --- 足回り (omni_chassis) ---
     chassis = Node(
@@ -438,6 +491,13 @@ def generate_launch_description():
             'localization', default_value='sotoba', choices=['sotoba', 'amcl', 'gicp'],
             description='自己位置推定のやり方。sotoba: sotoba_node (ICP)、amcl: nav2_amcl、gicp: gicp_localizer (small_gicp)'),
         DeclareLaunchArgument(
+            'navigation', default_value='tracker', choices=['tracker', 'nav2'],
+            description='経路の追従のやり方。tracker: path_follower + tracker_node、nav2: Nav2 (localization:=amcl / gicp と組み合わせる)'),
+        DeclareLaunchArgument(
+            'nav2_mode', default_value='follow_path', choices=['follow_path', 'through_poses'],
+            description='navigation:=nav2 で経路を渡すやり方。follow_path: 経路の点をそのまま FollowPath に、'
+                        'through_poses: 間引いた姿勢を NavigateThroughPoses に (経路は Nav2 が引き直す)'),
+        DeclareLaunchArgument(
             'point_map', default_value=config('oumuamua_bringup', 'maps/field.pcd'),
             description='localization:=gicp の点群地図 (PCD)'),
         DeclareLaunchArgument(
@@ -475,6 +535,7 @@ def generate_launch_description():
         state_estimator,
         tracker,
         path_follower,
+        nav2,
         chassis,
         wheels,
         robomas,

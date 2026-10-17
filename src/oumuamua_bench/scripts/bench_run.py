@@ -52,7 +52,7 @@ GROUPS = {
     'navigation': [
         'tracker_node', 'path_follower_node', 'controller_server', 'planner_server', 'bt_navigator',
         'velocity_smoother', 'behavior_server', 'smoother_server', 'waypoint_follower', 'collision_monitor',
-        'route_server', 'docking_server', 'opennav_docking',
+        'route_server', 'docking_server', 'opennav_docking', 'nav2_path_driver.py',
     ],
 }
 IGNORED = {'robot_sim', 'ros2', 'bench_run.py', 'python3', 'bash', 'sh', 'sleep', 'podman', 'conmon'}
