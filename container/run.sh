@@ -7,7 +7,8 @@
 #   OUMUAMUA_IMAGE    image tag (default: localhost/oumuamua:lyrical)
 #   EXTRA_CA_CERT     CA certificate of a TLS-intercepting proxy, used only during the build
 #   REBUILD=1         rebuild the image even if it exists
-#   DEVICES           devices to pass through, HOST or HOST:CONTAINER (default: /dev/robomas, if it exists)
+#   DEVICES           devices to pass through, HOST or HOST:CONTAINER
+#                     (default: /dev/robomas and the Hokuyo USB LiDAR, those that exist)
 set -euo pipefail
 
 if [ -n "${CONTAINER_ENGINE:-}" ]; then
@@ -36,8 +37,10 @@ fi
 # Serial devices to pass through (space separated, each HOST or HOST:CONTAINER). The robomas
 # USB-CAN bridge opens /dev/robomas (udev rule in robomas_plugins); it is passed automatically
 # when present. Without the udev rule (e.g. WSL2 without systemd), use DEVICES=/dev/ttyACM0:/dev/robomas.
+# The Hokuyo LiDAR over USB serial is passed under its by-id name, which config/urg_serial.yaml opens.
+HOKUYO=/dev/serial/by-id/usb-Hokuyo_Data_Flex_for_USB_URG-Series_USB_Driver-if00
 DEVICE_ARGS=()
-for dev in ${DEVICES:-/dev/robomas}; do
+for dev in ${DEVICES:-/dev/robomas $HOKUYO}; do
   # Resolve symlinks (/dev/robomas -> ttyACM1): podman passes the link target under its own name.
   [ -e "${dev%%:*}" ] && DEVICE_ARGS+=(--device "$(readlink -f "${dev%%:*}"):${dev#*:}")
 done
