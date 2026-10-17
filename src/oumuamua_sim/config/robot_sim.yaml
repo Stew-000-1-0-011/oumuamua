@@ -79,3 +79,4 @@ robot_sim:
     # --- 真値 ---
     field_frame: field
     truth_frame: base_link_truth
+    truth_tf: true             # TF field -> truth_frame を出す (sim_rate で出るので、TF を聞くノードが重くなる)

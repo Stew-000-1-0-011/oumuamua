@@ -170,6 +170,9 @@ namespace {
 			// --- 真値 ---
 			this->field_frame_ = this->declare_parameter<std::string>("field_frame", "field");
 			this->truth_frame_ = this->declare_parameter<std::string>("truth_frame", "base_link_truth");
+			// 真値の TF を出すか。sim_rate (200 Hz) で出るので、TF を聞いている全ノードの負荷が増える。
+			// 計算負荷を測るとき (oumuamua_bench) は切る
+			this->truth_tf_ = this->declare_parameter<bool>("truth_tf", true);
 
 			this->read_runtime_params();
 			this->param_cb_ = this->add_post_set_parameters_callback(
@@ -465,6 +468,9 @@ namespace {
 			odom.twist.twist.angular.z = v.omega;
 			this->truth_odom_pub_->publish(odom);
 
+			if (!this->truth_tf_) {
+				return;
+			}
 			geometry_msgs::msg::TransformStamped tf{};
 			tf.header = msg.header;
 			tf.child_frame_id = this->truth_frame_;
@@ -501,6 +507,7 @@ namespace {
 
 		std::string field_frame_{};
 		std::string truth_frame_{};
+		bool truth_tf_{true};
 
 		rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_sub_{};
 		rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_stamped_sub_{};

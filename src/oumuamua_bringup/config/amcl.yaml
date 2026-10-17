@@ -23,9 +23,11 @@ amcl:
     recovery_alpha_fast: 0.0
     recovery_alpha_slow: 0.0
 
-    # --- 更新の間隔 (動いた量)。既定 (0.25 m / 0.2 rad) は速く走る機体には粗いので細かくする ---
-    update_min_d: 0.02
-    update_min_a: 0.05
+    # --- 更新の間隔 (動いた量)。0 なら止まっていても毎スキャン更新する ---
+    # 止まっている間に更新しないと、state_estimator が観測の途切れとみなして推定を止める (path_follower が走り出せない)
+    # し、止まっている間に自己位置を直せない
+    update_min_d: 0.0
+    update_min_a: 0.0
 
     # --- 動きのモデル (オドメトリの誤差)。車輪オドメトリは数 % 程度で合っている ---
     alpha1: 0.1

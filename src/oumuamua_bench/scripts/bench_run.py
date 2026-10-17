@@ -426,7 +426,8 @@ def run_once(args, variant_name, variant, scenario_name, scenario, seed, paths, 
     log_dir.mkdir(parents=True, exist_ok=True)
     tag = f'{variant_name}__{scenario_name}__{seed}'
 
-    sim_params = {'seed': seed}
+    # 真値の TF は 200 Hz で出て、TF を聞くノード全部の負荷を上げる (実機には無い) ので切る
+    sim_params = {'seed': seed, 'truth_tf': False}
     sim_params.update(scenario.get('robot_sim') or {})
     with tempfile.NamedTemporaryFile('w', suffix='.yaml', prefix='bench_sim_', delete=False) as f:
         yaml.safe_dump({'robot_sim': {'ros__parameters': nested(sim_params)}}, f)
