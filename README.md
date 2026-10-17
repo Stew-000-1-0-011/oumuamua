@@ -15,6 +15,8 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 | `src/state_estimator` | 自己位置と機体速度の推定。sotoba_node と対になって事前分布を渡す |
 | `src/path_follower` | 起動前に作った経路ファイルを読み、速度計画を付けて tracker_node に目標を出す。経路ファイルを作るスクリプト付き |
 | `src/body_odometry` | 機体速度を積分して `odom -> base_link` とオドメトリを出す (AMCL や Nav2 と組み合わせる用) |
+| `src/gicp_localizer` | 2D スキャンを点群地図に small_gicp で位置合わせする自己位置推定 (sotoba_node と比べる用) |
+| `src/small_gicp` | 点群の位置合わせのライブラリ (koide3/small_gicp v1.0.1) |
 | `src/oumuamua_bench` | 構成どうしをシミュレーションの閉ループで比べる (追従・自己位置・計算負荷) |
 
 ## つながり
@@ -36,7 +38,7 @@ state_estimator だけにしてある。リセットは state_estimator の `~/r
 `estimator:=false` なら state_estimator を立てず、sotoba_ros の persistence_predictor (持続予測。機体の動きは知らない) が
 事前分布を出す。sotoba_node が TF `field -> base_link` を出し、tracker_node はそれを使う。
 
-### AMCL で自己位置を推定する (`localization:=amcl`)
+### AMCL / small_gicp で自己位置を推定する (`localization:=amcl` / `gicp`)
 
 sotoba_node の代わりに nav2_amcl (パーティクルフィルタ) と map_server を立てる。地図は sotoba のモデルと同じ壁だけの
 `config/maps/field.yaml` (oumuamua_sim の `make_field_map` で作る。`src/oumuamua_bench/README.md` 参照)。
@@ -46,7 +48,13 @@ body_odometry が車輪の機体速度を積分して TF `odom -> base_link` と
 - `estimator:=true`: AMCL の推定 (`/amcl_pose`) を state_estimator の観測にし、state_estimator が TF `field -> odom` と
   `/state_estimator/odom` を出す
 
-パラメータは `config/amcl.yaml`。sotoba との比べ方は `src/oumuamua_bench`。
+パラメータは `config/amcl.yaml`。
+
+`localization:=gicp` は AMCL の代わりに gicp_localizer を立てる (`src/gicp_localizer`)。スキャンを点群地図
+`config/maps/field.pcd` に small_gicp (GICP) で位置合わせする。odom・TF・`estimator` の扱いは AMCL と同じで、
+推定は `/gicp_localizer/pose`。
+
+sotoba との比べ方は `src/oumuamua_bench`。
 
 tracker_node への目標 (`/tracker_node/reference`, `holonomic_tracker/msg/TrackingReference`) は path_follower が出す。
 起動しただけでは走らない。経路の始点に置いて、次で走り出す:
@@ -93,9 +101,10 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `sim` | `false` | `/cmd_vel` から先をシミュレータにする (下の「シミュレーション」) |
 | `path_dir` | `config/paths` | path_follower の経路ファイルを置いた場所 (どれを読むかは `path_follower.yaml` の `paths`) |
 | `estimator` | `true` | state_estimator を使う。`false` なら sotoba_ros の持続予測で事前を出す |
-| `localization` | `sotoba` | 自己位置推定のやり方。`sotoba`: sotoba_node (ICP)、`amcl`: nav2_amcl (下の「AMCL で自己位置を推定する」) |
+| `localization` | `sotoba` | 自己位置推定のやり方。`sotoba`: sotoba_node (ICP)、`amcl`: nav2_amcl、`gicp`: gicp_localizer (下の「AMCL / small_gicp で自己位置を推定する」) |
 | `start_x`, `start_y`, `start_yaw` | `-2.2`, `1.3`, `0.0` | 機体 (base_link) の初期姿勢。sotoba 以外の自己位置推定に渡す。sotoba_node.yaml の `start_*` (LiDAR の姿勢) と同じ置き場所にする |
 | `map` | `config/maps/field.yaml` | `localization:=amcl` の地図 |
+| `point_map` | `config/maps/field.pcd` | `localization:=gicp` の点群地図 |
 | `velocity_source` | `wheels` | state_estimator の速度入力。`wheels`: 車輪オドメトリ (`sim:=true` なら robot_sim の模擬)、`cmd_vel`: 指令値 |
 | `cmd_tau` | `0.1` | `velocity_source:=cmd_vel` のときの、指令への追従の時定数 [s] |
 

@@ -21,3 +21,6 @@
 	path = src/mini_shirasu_ros
 	url = https://github.com/Stew-000-1-0-011/mini_shirasu_ros.git
 	branch = main
+[submodule "src/small_gicp"]
+	path = src/small_gicp
+	url = https://github.com/koide3/small_gicp.git

@@ -12,3 +12,9 @@ amcl:
 amcl_est:
   description: nav2_amcl の推定を state_estimator の観測にする
   launch_args: [localization:=amcl, estimator:=true]
+gicp:
+  description: gicp_localizer (small_gicp) + 車輪オドメトリ (body_odometry)。state_estimator なし
+  launch_args: [localization:=gicp, estimator:=false]
+gicp_est:
+  description: gicp_localizer の推定を state_estimator の観測にする
+  launch_args: [localization:=gicp, estimator:=true]

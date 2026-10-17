@@ -16,6 +16,8 @@ localization で自己位置推定のやり方を選ぶ:
                  body_odometry が機体速度を積分して TF odom -> base_link を出す。
                  estimator:=false なら AMCL が TF field -> odom を出し、
                  estimator:=true なら AMCL の推定 (/amcl_pose) を state_estimator の観測にし、state_estimator が field -> odom を出す
+  gicp         : gicp_localizer (small_gicp で点群地図 config/maps/field.pcd に位置合わせ)。
+                 odom とTF・estimator の扱いは amcl と同じ (推定は /gicp_localizer/pose)
 estimator:=false (localization:=sotoba) なら sotoba_ros の persistence_predictor (持続予測) が事前分布を出し、sotoba_node が TF field -> base_link を出す。
 
 sim:=true なら、/cmd_vel から先 (足回り・モータドライバ・USB-CAN・LiDAR) の代わりに
@@ -187,21 +189,40 @@ def generate_launch_description():
         condition=IfCondition(PythonExpression(["'", estimator, "' != 'true' and '", localization, "' == 'sotoba'"])),
     )
 
-    # --- localization:=amcl ---
+    # --- localization:=amcl / gicp (どちらも body_odometry の odom -> base_link の上に field -> odom を出す) ---
     def body_velocity_topic(context):
         return '/robot_sim/body_velocity' if sim.perform(context) == 'true' else '/chassis_node/body_velocity'
 
     def make_amcl(context):
-        if localization.perform(context) != 'amcl':
+        mode = localization.perform(context)
+        if mode not in ('amcl', 'gicp'):
             return []
-        return [
-            Node(
-                package='body_odometry',
-                executable='body_odometry_node',
-                name='body_odometry',
-                remappings=[('~/body_velocity', body_velocity_topic(context)), ('~/odom', '/odom')],
+        odometry = Node(
+            package='body_odometry',
+            executable='body_odometry_node',
+            name='body_odometry',
+            remappings=[('~/body_velocity', body_velocity_topic(context)), ('~/odom', '/odom')],
+            output='screen',
+        )
+        if mode == 'gicp':
+            return [odometry, Node(
+                package='gicp_localizer',
+                executable='gicp_localizer',
+                name='gicp_localizer',
+                parameters=[
+                    config('gicp_localizer', 'gicp_localizer.yaml'),
+                    NodeParams('gicp_localizer', {
+                        'map_file': LaunchConfiguration('point_map'),
+                        'initial_pose': PythonExpression([
+                            '[float(', LaunchConfiguration('start_x'), '), float(', LaunchConfiguration('start_y'),
+                            '), float(', LaunchConfiguration('start_yaw'), ')]']),
+                        'publish_tf': not_estimator,
+                    }),
+                ],
                 output='screen',
-            ),
+            )]
+        return [
+            odometry,
             Node(
                 package='nav2_map_server',
                 executable='map_server',
@@ -253,8 +274,8 @@ def generate_launch_description():
         else:
             raise RuntimeError(f"velocity_source must be 'wheels' or 'cmd_vel': {source}")
         remappings = [('~/body_velocity', velocity_topic)]
-        if localization.perform(context) == 'amcl':
-            # AMCL の推定を観測にする。TF は body_odometry の odom -> base_link の上に field -> odom を出す
+        if localization.perform(context) in ('amcl', 'gicp'):
+            # AMCL / gicp_localizer の推定を観測にする。TF は body_odometry の odom -> base_link の上に field -> odom を出す
             params.append(NodeParams('state_estimator', {
                 'measurement_source': 'pose',
                 'odom_frame': 'odom',
@@ -262,7 +283,8 @@ def generate_launch_description():
                     '[float(', LaunchConfiguration('start_x'), '), float(', LaunchConfiguration('start_y'),
                     '), float(', LaunchConfiguration('start_yaw'), ')]']),
             }))
-            remappings.append(('~/pose_measurement', '/amcl_pose'))
+            remappings.append(('~/pose_measurement',
+                               '/amcl_pose' if localization.perform(context) == 'amcl' else '/gicp_localizer/pose'))
         return [Node(
             package='state_estimator',
             executable='state_estimator_node',
@@ -413,8 +435,11 @@ def generate_launch_description():
             'estimator', default_value='true',
             description='state_estimator で自己位置と速度を推定する。false なら sotoba_ros の持続予測で事前を出す'),
         DeclareLaunchArgument(
-            'localization', default_value='sotoba', choices=['sotoba', 'amcl'],
-            description='自己位置推定のやり方。sotoba: sotoba_node (ICP)、amcl: nav2_amcl'),
+            'localization', default_value='sotoba', choices=['sotoba', 'amcl', 'gicp'],
+            description='自己位置推定のやり方。sotoba: sotoba_node (ICP)、amcl: nav2_amcl、gicp: gicp_localizer (small_gicp)'),
+        DeclareLaunchArgument(
+            'point_map', default_value=config('oumuamua_bringup', 'maps/field.pcd'),
+            description='localization:=gicp の点群地図 (PCD)'),
         DeclareLaunchArgument(
             'map', default_value=config('oumuamua_bringup', 'maps/field.yaml'),
             description='localization:=amcl の地図 (nav2_map_server の yaml)'),

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>gicp_localizer</name>
+  <version>0.0.0</version>
+  <description>
+    2D LiDAR のスキャンを、フィールドの点群地図に small_gicp (GICP) で位置合わせして自己位置を出す。
+    初期値は TF field -> base_link (オドメトリで進めたもの)。
+  </description>
+  <maintainer email="shnsk0204@gmail.com">Stew</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>eigen</depend>
+  <depend>small_gicp</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

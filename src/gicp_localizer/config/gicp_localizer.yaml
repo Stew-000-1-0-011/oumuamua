@@ -1,0 +1,22 @@
+# gicp_localizer のパラメータ。map_file・initial_pose・publish_tf は oumuamua_bringup の launch が決める。
+gicp_localizer:
+  ros__parameters:
+    field_frame: field
+    odom_frame: odom
+    base_frame: base_link
+    scan_topic: /scan
+    transform_tolerance: 0.1      # [s] field -> odom に付ける先の時刻 (AMCL と同じ)
+    range_min: 0.05
+    range_max: 10.0
+    layer_offset: 0.05            # [m] 平面の点を z = ±これにも複製する (GICP の共分散を鉛直な面にする)
+    num_neighbors: 10             # 共分散を求める近傍の数
+    num_threads: 2
+    max_correspondence_distance_coarse: 0.3   # [m] 1 段目。広いと、モデルに無い物 (棚) の点を近くの壁に引き寄せる
+    max_correspondence_distance: 0.1          # [m] 2 段目
+    max_iterations: 20
+    min_inlier_ratio: 0.3         # 対応の取れた点がこれを切ったスキャンは使わない
+    max_jump_xy: 0.3              # [m] 初期値からこれより大きく動いた結果は使わない
+    max_jump_yaw: 0.3             # [rad]
+    covariance_floor_xy: 0.002    # [m] 共分散の下限 (標準偏差)
+    covariance_floor_yaw: 0.002   # [rad]
+    tf_timeout: 0.05              # [s] スキャンの時刻の odom -> base_link を待つ時間
