@@ -25,10 +25,11 @@ find_package(std_srvs REQUIRED)
 find_package(robomas_plugins REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
-# --- アクションとメッセージ ---
+# --- アクション・サービス・メッセージ ---
 rosidl_generate_interfaces(${PROJECT_NAME}
 	"action/MoveLift.action"
 	"msg/GripperState.msg"
+	"srv/SetLiftPosition.srv"
 	DEPENDENCIES std_msgs
 )
 rosidl_get_typesupport_target(gripper_interfaces_target ${PROJECT_NAME} "rosidl_typesupport_cpp")

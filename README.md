@@ -25,7 +25,7 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` と
 - tracker_node は `/state_estimator/odom` を使って `/cmd_vel` (`TwistStamped`) を出す
 - chassis_node -> `/wheel<i>/target_velocity` -> mini_shirasu_node (`wheel0..2`)
   -> `/robomas_can_tx` -> robomas_bridge (USB-CAN) -> mini-shirasu 3 枚 (3 輪オムニ)
-- 把持機構 i (`i = 0, 1`): gripper_node (`gripper<i>`) が `~/move_lift` (アクション) で昇降し、`~/set_suction` で吸引をオン/オフする。
+- 把持機構 i (`i = 0, 1`): gripper_node (`gripper<i>`) が `~/set_lift_position` (`config/gripper.yaml` の `lift.positions` の番号) で昇降し、`~/set_suction` で吸引をオン/オフする。
   昇降は `/robomas_frame`・`/robomas_target<k>` -> robomas_bridge -> ロボマス (ボードの位置制御)、
   吸引は `/suction<i>/target_current` -> mini_shirasu_node (`suction<i>`、電流制御) -> mini-shirasu。詳しくは `src/gripper/README.md`
 - 車輪の実測: mini_shirasu_node の `~/joint_state` -> chassis_node が機体速度にして `~/body_velocity`
@@ -97,7 +97,7 @@ ros2 launch oumuamua_bringup bringup.launch.py
   `minishirasu-firm/src/config.rs` のコンパイル時定数 なので、
   複数枚つなぐなら基板ごとに書き換えて焼き、ここと合わせる。今は基板 i に 目標 0x110+i / 状態 0x120+i / コマンド 0x130+i / 応答 0x140+i を割り当てている
 
-- `src/oumuamua_bringup/config/gripper.yaml`, `suction.yaml`: 把持機構。ロボマスの ID と種類、ボードの位置目標の単位
+- `src/oumuamua_bringup/config/gripper.yaml`, `suction.yaml`: 把持機構。ロボマスの ID と種類、昇降の高さ (`lift.positions`)、ボードの位置目標の単位
   (`lift.target_scale`)、行程、吸引の電流 (`suction.current` は 0 A にしてあるので、このままでは吸わない)、
   吸引の基板の CAN ID (基板 3, 4 = 0x113.., 0x114.. を割り当てている)
 

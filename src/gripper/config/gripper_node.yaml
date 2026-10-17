@@ -35,6 +35,11 @@ gripper:
       settle_time: 0.2          # [s] 着いた状態がこれだけ続いたら成功
       timeout_margin: 2.0       # [s] 距離 / max_speed にこれを足した時間で着かなければ失敗
 
+      # --- 使う高さ ---
+      # ~/set_lift_position で番号 (0 始まり) を送ると、その高さへ動く。min_height..max_height に収めること
+      positions: [0.0]          # [m]
+      position_names: ["bottom"]  # ログ用の名前 (空なら番号だけ)。書くなら positions と同じ長さ
+
     suction:
       # mini_shirasu_node (mode: current) の ~/target_current。オンでこの電流、オフで 0 A を送り続ける
       target_topic: /suction/target_current

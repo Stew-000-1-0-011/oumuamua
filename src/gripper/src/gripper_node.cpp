@@ -3,6 +3,7 @@
 /// 昇降: ロボマス (C610 / C620) を、robomas_plugins の USB-CAN ボードの位置制御で動かす。
 /// - 起動時に位置制御の設定 (robomas_frame) を送り、以後 control_rate で位置の目標 (robomas_target<k>) を送る
 /// - 位置の目標は、ゴールへ向けて lift.max_speed で動かしながら送る (急に飛ばさない)
+/// - 使う高さ (下・中段・上段など) は lift.positions に並べておき、~/set_lift_position で番号を送って選ぶ
 /// - 高さは起動時の位置を 0 とする。ボードへの目標は lift.target_scale * 高さ + lift.target_offset
 /// - ロボマスのフィードバック (CAN 0x200 + k) が robomas_can_rx に届いていれば、ロータの回転を数え上げて
 ///   今の高さとする。届いていなければ、送っている指令を今の高さとみなす
@@ -13,7 +14,8 @@
 ///
 /// | 方向 | 名前 | 型 |
 /// | --- | --- | --- |
-/// | action | `~/move_lift` | gripper/action/MoveLift |
+/// | srv | `~/set_lift_position` | gripper/srv/SetLiftPosition (lift.positions の何番目の高さへ動かすか) |
+/// | action | `~/move_lift` | gripper/action/MoveLift (高さ [m] を直接指定。調整用) |
 /// | srv | `~/set_suction` | std_srvs/SetBool (オン/オフ) |
 /// | srv | `~/enable_lift` | std_srvs/SetBool (true で位置制御、false で無効) |
 /// | pub | `~/state` | gripper/msg/GripperState |
@@ -25,6 +27,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -37,10 +40,15 @@
 #include "gripper/action/move_lift.hpp"
 #include "gripper/lift.hpp"
 #include "gripper/msg/gripper_state.hpp"
+#include "gripper/srv/set_lift_position.hpp"
 
 namespace {
 	using MoveLift = gripper::action::MoveLift;
 	using GoalHandle = rclcpp_action::ServerGoalHandle<MoveLift>;
+	using SetLiftPosition = gripper::srv::SetLiftPosition;
+
+	/// 昇降の動きの、1 周期ごとの結果
+	enum class Motion { idle, moving, arrived, timed_out };
 
 	/// robomas_plugins のボードの制御モード (RobomasFrame.mode)
 	constexpr std::uint8_t mode_disable = 0;
@@ -74,6 +82,16 @@ namespace {
 			this->timeout_margin_ = this->declare_parameter<double>("lift.timeout_margin", 2.0);
 			this->feedback_timeout_ = this->declare_parameter<double>("lift.feedback_timeout", 0.2);
 			this->config_repeat_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.config_repeat", 3));
+			this->positions_ = this->declare_parameter<std::vector<double>>("lift.positions", std::vector<double>{});
+			this->position_names_ = this->declare_parameter<std::vector<std::string>>("lift.position_names", std::vector<std::string>{});
+			if (!this->position_names_.empty() && this->position_names_.size() != this->positions_.size()) {
+				throw std::invalid_argument("lift.position_names must be empty or as long as lift.positions");
+			}
+			for (const double h : this->positions_) {
+				if (!std::isfinite(h) || h < this->min_height_ || h > this->max_height_) {
+					throw std::invalid_argument("lift.positions must be within lift.min_height..lift.max_height");
+				}
+			}
 			const bool enable_on_start = this->declare_parameter<bool>("lift.enable_on_start", true);
 
 			// --- 吸引 ---
@@ -106,6 +124,12 @@ namespace {
 					res->success = true;
 					res->message = req->data ? "suction on" : "suction off";
 					RCLCPP_INFO(this->get_logger(), "%s", res->message.c_str());
+				}
+			);
+			this->position_srv_ = this->create_service<SetLiftPosition>(
+				"~/set_lift_position",
+				[this](const std::shared_ptr<SetLiftPosition::Request> req, std::shared_ptr<SetLiftPosition::Response> res) {
+					this->on_set_position(*req, *res);
 				}
 			);
 			this->enable_srv_ = this->create_service<std_srvs::srv::SetBool>(
@@ -153,8 +177,8 @@ namespace {
 			this->config_sent_ = 0;
 			this->send_mode(enabled ? mode_position : mode_disable);
 			if (!enabled) {
-				this->ramp_.hold();
 				this->abort_goal("lift disabled");
+				this->stop_move();
 			}
 			RCLCPP_INFO(this->get_logger(), "lift %s", enabled ? "enabled (position control)" : "disabled");
 		}
@@ -202,6 +226,87 @@ namespace {
 			return this->ramp_.position();
 		}
 
+		// ---------------------------------------------------------------- 動かし方
+
+		/// goal [m] へ動き出す。index は lift.positions の番号 (高さを直接指定したなら -1)
+		void start_move(const double goal, const int index) {
+			this->ramp_.set_goal(goal);
+			this->position_index_ = index;
+			this->moving_ = true;
+			this->arrived_ = false;
+			this->settled_since_.reset();
+			const double distance = std::abs(goal - this->ramp_.position());
+			this->deadline_ = this->now() + rclcpp::Duration::from_seconds(distance / std::max(this->max_speed_, 1e-6) + this->timeout_margin_);
+		}
+
+		/// 今の指令で止める
+		void stop_move() {
+			this->ramp_.hold();
+			this->position_index_ = -1;
+			this->moving_ = false;
+			this->arrived_ = false;
+			this->settled_since_.reset();
+		}
+
+		/// 指令がゴールに着き、(フィードバックがあれば) 実際の高さも tolerance 以内に settle_time 留まったら着いた
+		auto update_motion() -> Motion {
+			if (!this->moving_) {
+				return Motion::idle;
+			}
+			const auto now = this->now();
+			const bool close = this->ramp_.arrived()
+				&& (!this->feedback_valid() || std::abs(this->height() - this->ramp_.goal()) <= this->tolerance_);
+			if (close) {
+				if (!this->settled_since_) {
+					this->settled_since_ = now;
+				}
+				if ((now - *this->settled_since_).seconds() >= this->settle_time_) {
+					this->moving_ = false;
+					this->arrived_ = true;
+					return Motion::arrived;
+				}
+			} else {
+				this->settled_since_.reset();
+			}
+			if (now > this->deadline_) {
+				this->moving_ = false;
+				RCLCPP_WARN(this->get_logger(), "lift timed out at %.3f m (goal %.3f m)", this->height(), this->ramp_.goal());
+				return Motion::timed_out;
+			}
+			return Motion::moving;
+		}
+
+		auto position_label(const int index) const -> std::string {
+			if (index >= 0 && static_cast<std::size_t>(index) < this->position_names_.size()) {
+				return std::to_string(index) + " (" + this->position_names_[static_cast<std::size_t>(index)] + ")";
+			}
+			return std::to_string(index);
+		}
+
+		// ---------------------------------------------------------------- サービス
+
+		void on_set_position(const SetLiftPosition::Request& req, SetLiftPosition::Response& res) {
+			if (!this->lift_enabled_) {
+				res.success = false;
+				res.message = "lift is disabled";
+			} else if (req.index < 0 || static_cast<std::size_t>(req.index) >= this->positions_.size()) {
+				res.success = false;
+				res.message = "index " + std::to_string(req.index) + " is out of lift.positions (size "
+					+ std::to_string(this->positions_.size()) + ")";
+			} else {
+				this->abort_goal("preempted by set_lift_position");
+				const double goal = this->positions_[static_cast<std::size_t>(req.index)];
+				this->start_move(goal, req.index);
+				res.success = true;
+				res.message = "moving to position " + this->position_label(req.index) + ": " + std::to_string(goal) + " m";
+			}
+			if (res.success) {
+				RCLCPP_INFO(this->get_logger(), "%s", res.message.c_str());
+			} else {
+				RCLCPP_WARN(this->get_logger(), "set_lift_position rejected: %s", res.message.c_str());
+			}
+		}
+
 		// ---------------------------------------------------------------- アクション
 
 		auto on_goal(const MoveLift::Goal& goal) -> rclcpp_action::GoalResponse {
@@ -222,11 +327,8 @@ namespace {
 			if (goal != requested) {
 				RCLCPP_WARN(this->get_logger(), "move_lift: %.3f m is out of range; going to %.3f m", requested, goal);
 			}
-			this->ramp_.set_goal(goal);
+			this->start_move(goal, -1);
 			this->goal_handle_ = handle;
-			this->settled_since_.reset();
-			const double distance = std::abs(goal - this->ramp_.position());
-			this->deadline_ = this->now() + rclcpp::Duration::from_seconds(distance / std::max(this->max_speed_, 1e-6) + this->timeout_margin_);
 		}
 
 		void abort_goal(const char* why) {
@@ -240,50 +342,45 @@ namespace {
 			this->goal_handle_.reset();
 		}
 
-		void update_goal() {
+		/// アクションのゴールがあれば、取り消し・途中経過・結果を返す
+		void update_goal(const Motion motion) {
 			if (!this->goal_handle_) {
 				return;
 			}
 			auto result = std::make_shared<MoveLift::Result>();
 			result->height = this->height();
-			if (this->goal_handle_->is_canceling()) {
-				this->ramp_.hold();
-				result->reached = false;
-				result->message = "canceled";
-				this->goal_handle_->canceled(result);
+			switch (motion) {
+			case Motion::arrived:
+				result->reached = true;
+				result->message = this->feedback_valid() ? "reached" : "reached (by the command; no motor feedback)";
+				this->goal_handle_->succeed(result);
 				this->goal_handle_.reset();
 				return;
+			case Motion::timed_out:
+			case Motion::idle:
+				result->reached = false;
+				result->message = motion == Motion::timed_out ? "timed out" : "stopped";
+				this->goal_handle_->abort(result);
+				this->goal_handle_.reset();
+				return;
+			case Motion::moving:
+				break;
 			}
-
 			auto feedback = std::make_shared<MoveLift::Feedback>();
 			feedback->height = result->height;
 			feedback->target = this->ramp_.position();
 			this->goal_handle_->publish_feedback(feedback);
+		}
 
-			// 指令がゴールに着き、(フィードバックがあれば) 実際の高さも tolerance 以内に settle_time 留まったら着いた
-			const bool close = this->ramp_.arrived()
-				&& (!this->feedback_valid() || std::abs(result->height - this->ramp_.goal()) <= this->tolerance_);
-			const auto now = this->now();
-			if (close) {
-				if (!this->settled_since_) {
-					this->settled_since_ = now;
-				}
-				if ((now - *this->settled_since_).seconds() >= this->settle_time_) {
-					result->reached = true;
-					result->message = this->feedback_valid() ? "reached" : "reached (by the command; no motor feedback)";
-					this->goal_handle_->succeed(result);
-					this->goal_handle_.reset();
-					return;
-				}
-			} else {
-				this->settled_since_.reset();
-			}
-			if (now > this->deadline_) {
+		void cancel_goal_if_requested() {
+			if (this->goal_handle_ && this->goal_handle_->is_canceling()) {
+				this->stop_move();
+				auto result = std::make_shared<MoveLift::Result>();
+				result->height = this->height();
 				result->reached = false;
-				result->message = "timed out";
-				this->goal_handle_->abort(result);
+				result->message = "canceled";
+				this->goal_handle_->canceled(result);
 				this->goal_handle_.reset();
-				RCLCPP_WARN(this->get_logger(), "move_lift timed out at %.3f m (goal %.3f m)", result->height, this->ramp_.goal());
 			}
 		}
 
@@ -296,7 +393,8 @@ namespace {
 				target.target = static_cast<float>(this->target_scale_ * command + this->target_offset_);
 				this->target_pub_->publish(target);
 			}
-			this->update_goal();
+			this->cancel_goal_if_requested();
+			this->update_goal(this->update_motion());
 
 			std_msgs::msg::Float64 current{};
 			current.data = this->suction_on_ ? this->suction_current_ : 0.0;
@@ -307,7 +405,9 @@ namespace {
 			state.lift_height = this->height();
 			state.lift_command = this->ramp_.position();
 			state.lift_goal = this->ramp_.goal();
-			state.lift_moving = this->goal_handle_ != nullptr;
+			state.lift_position = this->position_index_;
+			state.lift_moving = this->moving_;
+			state.lift_arrived = this->arrived_;
 			state.lift_feedback = this->feedback_valid();
 			state.suction_on = this->suction_on_;
 			state.suction_current = current.data;
@@ -335,6 +435,8 @@ namespace {
 		double feedback_timeout_{};
 		int config_repeat_{};
 		double suction_current_{};
+		std::vector<double> positions_{};
+		std::vector<std::string> position_names_{};
 
 		// 状態
 		bool lift_enabled_{false};
@@ -343,6 +445,9 @@ namespace {
 		gripper::RotorCounter counter_{};
 		std::optional<rclcpp::Time> last_feedback_{};
 		std::shared_ptr<GoalHandle> goal_handle_{};
+		bool moving_{false};
+		bool arrived_{false};
+		int position_index_{-1};
 		std::optional<rclcpp::Time> settled_since_{};
 		rclcpp::Time deadline_{};
 		bool suction_on_{false};
@@ -353,6 +458,7 @@ namespace {
 		rclcpp::Publisher<gripper::msg::GripperState>::SharedPtr state_pub_{};
 		rclcpp::Subscription<robomas_plugins::msg::Frame>::SharedPtr can_rx_sub_{};
 		rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr suction_srv_{};
+		rclcpp::Service<SetLiftPosition>::SharedPtr position_srv_{};
 		rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr enable_srv_{};
 		rclcpp_action::Server<MoveLift>::SharedPtr action_server_{};
 		rclcpp::TimerBase::SharedPtr timer_{};

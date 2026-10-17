@@ -9,6 +9,7 @@
 # - lift.target_scale: ボードの位置目標の単位 [?/m]
 # - lift.meters_per_output_revolution: 出力軸 1 回転で上がる高さ (0 ならフィードバックを使わない)
 # - lift.max_height: 昇降の行程
+# - lift.positions: 使う高さ (下・中段・上段)。~/set_lift_position で番号を送って選ぶ
 # - suction.current と suction<i> の settings.imax: 吸引モータの許容電流
 # - suction<i> の can_id は suction.yaml
 
@@ -35,6 +36,10 @@
       tolerance: 0.005
       settle_time: 0.2
       timeout_margin: 2.0
+      # ~/set_lift_position の番号 -> 高さ [m] (起動時の位置が 0)。機構ごとに変えるなら gripper<i> に書く
+      #           0: 下   1: 中段   2: 上段
+      positions: [0.0,   0.12,     0.25]
+      position_names: [bottom, middle, top]
     suction:
       current: 0.0
     robomas_frame_topic: /robomas_frame
