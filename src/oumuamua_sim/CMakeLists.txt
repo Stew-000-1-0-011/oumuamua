@@ -52,7 +52,17 @@ target_link_libraries(robot_sim
 		tf2_ros::tf2_ros
 )
 
-install(TARGETS robot_sim
+# フィールドのモデル -> 地図 (占有格子と点群)。AMCL / Nav2 / 点群の位置合わせとの比較用
+add_executable(make_field_map
+	src/make_field_map.cpp
+)
+target_link_libraries(make_field_map
+	PRIVATE
+		sotoba_ros::sotoba_ros_objects
+		rclcpp::rclcpp
+)
+
+install(TARGETS robot_sim make_field_map
 	DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY config

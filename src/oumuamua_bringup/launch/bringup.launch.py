@@ -285,6 +285,7 @@ def generate_launch_description():
             config('sotoba_ros', 'sotoba_node.yaml'),
             config('oumuamua_bringup', 'sotoba_node.yaml'),
             config('oumuamua_sim', 'robot_sim.yaml'),
+            LaunchConfiguration('sim_params'),
             NodeParams('robot_sim', {
                 'cmd_vel_stamped': True,
                 'lidar_height': LaunchConfiguration('lidar_z'),
@@ -350,6 +351,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'sim', default_value='false',
             description='/cmd_vel から先を oumuamua_sim で模擬する (LiDAR・足回り・ドライバ・USB-CAN は立てない)'),
+        DeclareLaunchArgument(
+            'sim_params', default_value=config('oumuamua_sim', 'robot_sim.yaml'),
+            description='robot_sim に追加で読ませるパラメータファイル (robot_sim.yaml の後に読む。乱数の種・傾き・障害物など)'),
         urg_configure,
         urg_activate,
         urg,

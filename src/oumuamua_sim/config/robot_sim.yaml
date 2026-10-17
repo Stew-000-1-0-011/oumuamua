@@ -8,6 +8,7 @@ robot_sim:
     cmd_vel_stamped: false     # true なら TwistStamped で受ける
     scan_topic: /scan
     sim_rate: 200.0            # [Hz] 運動の積分の周期
+    seed: 0                    # 雑音の乱数の種
 
     # --- LiDAR の取付 (base_link -> laser)。高さと上下は lidar_height / lidar_upside_down ---
     lidar_x: 0.0
@@ -65,6 +66,8 @@ robot_sim:
       clutter_count: 8           # フィールドの外に置く箱 (人や机の代わり、0.5 x 0.5 x 1.2 m)
       field_half_x: 2.82         # 箱を置かない範囲 (フィールドの外周壁)
       field_half_y: 1.69
+      # フィールドの中の、モデルに無い物 (相手ロボットなど)。[x, y, 半辺, x, y, 半辺, ...] で高さ 0.4 m の箱。
+      # 空のリストは型が決まらないので、使うときだけ書く (例: obstacles: [1.0, -0.8, 0.25])
 
     # --- 機体速度の実測 (車輪オドメトリの代わり) ---
     # ~/body_velocity (TwistStamped、機体座標系)。滑り (plant.velocity_scale_*) のぶんは割り戻すので、

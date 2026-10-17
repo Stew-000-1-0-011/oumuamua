@@ -101,6 +101,8 @@ namespace {
 
 			// --- フィールドの外の環境 (sotoba は知らない。LiDAR が傾いたときに見える) ---
 			this->add_environment();
+			// 雑音の乱数の種。比較の試行ごとに変える
+			this->rng_.seed(static_cast<std::mt19937::result_type>(this->declare_parameter<std::int64_t>("seed", 0)));
 
 			// --- 機体の傾き (振動) ---
 			this->declare_parameter<double>("tilt.static_roll", 0.0);
@@ -266,6 +268,18 @@ namespace {
 					Vec3{static_cast<float>(x), static_cast<float>(y), 0.6f}, id, Vec3{0.25f, 0.25f, 0.6f}
 				));
 				++i;
+			}
+
+			// フィールドの中の、モデルに無い物 (相手ロボットなど)。[x, y, 半辺, ...] で、高さ 0.4 m の箱
+			const auto obstacles =
+				this->declare_parameter<std::vector<double>>("environment.obstacles", std::vector<double>{});
+			for (std::size_t i = 0; i + 2 < obstacles.size(); i += 3) {
+				const auto half = static_cast<float>(obstacles[i + 2]);
+				this->environment_.emplace_back(sotoba::surface::BoxOuter(
+					Vec3{static_cast<float>(obstacles[i]), static_cast<float>(obstacles[i + 1]), 0.2f},
+					id,
+					Vec3{half, half, 0.2f}
+				));
 			}
 		}
 
