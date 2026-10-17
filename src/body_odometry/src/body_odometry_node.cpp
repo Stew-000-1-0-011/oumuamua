@@ -4,7 +4,7 @@
 /// - pub `~/odom` (nav_msgs/Odometry): odom_frame から見た base_frame の姿勢と、機体座標系の速度
 /// - TF odom_frame -> base_frame (publish_tf)
 ///
-/// 姿勢は受け取った速度を、前の時刻からの区間で中点の向きを使って積分する。時刻は TwistStamped の stamp。
+/// 姿勢は、前のメッセージからの区間を両端の速度の平均と中点の向きで積分する (台形則)。時刻は TwistStamped の stamp。
 
 #include <cmath>
 #include <memory>
@@ -50,11 +50,14 @@ namespace {
 			if (this->has_last_) {
 				const double dt = (stamp - this->last_stamp_).seconds();
 				if (dt > 0.0 && dt <= this->max_dt_) {
-					// 区間の中点の向きで回して足す。速度は前のメッセージの値を区間の値とする
-					const double mid = this->yaw_ + 0.5 * this->w_ * dt;
-					this->x_ += (std::cos(mid) * this->vx_ - std::sin(mid) * this->vy_) * dt;
-					this->y_ += (std::sin(mid) * this->vx_ + std::cos(mid) * this->vy_) * dt;
-					this->yaw_ = std::remainder(this->yaw_ + this->w_ * dt, 2.0 * std::numbers::pi);
+					// 区間の速度は両端の平均 (台形則)。区間の中点の向きで回して足す
+					const double avx = 0.5 * (this->vx_ + vx);
+					const double avy = 0.5 * (this->vy_ + vy);
+					const double aw = 0.5 * (this->w_ + w);
+					const double mid = this->yaw_ + 0.5 * aw * dt;
+					this->x_ += (std::cos(mid) * avx - std::sin(mid) * avy) * dt;
+					this->y_ += (std::sin(mid) * avx + std::cos(mid) * avy) * dt;
+					this->yaw_ = std::remainder(this->yaw_ + aw * dt, 2.0 * std::numbers::pi);
 				} else if (dt <= 0.0) {
 					return;
 				}

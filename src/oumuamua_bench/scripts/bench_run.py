@@ -497,6 +497,10 @@ def run_once(args, variant_name, variant, scenario_name, scenario, seed, paths, 
         os.unlink(sim_file)
 
     metrics = compute_metrics(rec, legs, paths, map_points, footprint)
+    if args.save_traces:
+        (out / 'traces').mkdir(exist_ok=True)
+        with open(out / 'traces' / f'{tag}.json', 'w') as f:
+            json.dump({'truth': rec.truth, 'est': rec.est, 'ref': rec.ref, 'cmd': rec.cmd, 'legs': legs}, f)
     rec.destroy_node()
     result = {
         'variant': variant_name,
@@ -528,6 +532,8 @@ def main():
     parser.add_argument('--startup-timeout', type=float, default=30.0)
     parser.add_argument('--settle', type=float, default=2.0, help='推定が出てから走り出すまでの待ち [s]')
     parser.add_argument('--leg-timeout', type=float, default=60.0)
+    parser.add_argument('--save-traces', action='store_true',
+                        help='走行ごとの真値・推定・目標・指令を <out>/traces/ に JSON で残す')
     parser.add_argument('--goal-settle', type=float, default=1.0, help='目標が終点に着いてから測るまでの待ち [s]')
     args = parser.parse_args()
 
