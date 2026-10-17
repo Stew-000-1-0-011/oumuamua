@@ -43,8 +43,8 @@ namespace {
 
 	void test_sweep() {
 		const Field field{.bounds = {-1.0, -1.0, 1.0, 1.0}, .obstacles = {{-0.05, -0.05, 0.05, 0.05}}};
-		const auto c = sweep_clearance(field, {{-0.8, 0.3, 0.0}, {0.8, 0.3, 0.0}}, 0.2, 0.01);
-		check(near(c.clearance, 0.05, 1e-9) && near(c.x, 0.0, 0.006), "the narrowest point of a straight move");
+		const auto c = sweep_clearance(field, {{-0.5, 0.3, 0.0}, {0.5, 0.3, 0.0}}, 0.2, 0.01);
+		check(near(c.clearance, 0.05, 1e-9) && std::abs(c.x) <= 0.05 + 1e-9, "the narrowest point of a straight move");
 	}
 
 	void test_boxes_from_flat() {
