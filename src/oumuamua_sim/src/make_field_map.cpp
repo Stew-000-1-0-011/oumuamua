@@ -70,8 +70,8 @@ namespace {
 
 			this->output_dir_ = this->declare_parameter<std::string>("map.output_dir", ".");
 			this->name_ = this->declare_parameter<std::string>("map.name", "field");
-			this->resolution_ = this->declare_parameter<double>("map.resolution", 0.02);
-			this->point_spacing_ = this->declare_parameter<double>("map.point_spacing", 0.01);
+			this->resolution_ = this->declare_parameter<double>("map.resolution", 0.01);
+			this->point_spacing_ = this->declare_parameter<double>("map.point_spacing", 0.005);
 			this->viewpoint_step_ = this->declare_parameter<double>("map.viewpoint_step", 0.2);
 			this->ray_num_ = this->declare_parameter<std::int64_t>("map.ray_num", 2880);
 			this->range_max_ = this->declare_parameter<double>("map.range_max", 10.0);
