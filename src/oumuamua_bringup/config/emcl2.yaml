@@ -1,0 +1,39 @@
+# localization:=emcl のときの emcl2 (ryuichiueda/emcl2_ros2、膨張リセット付きの MCL) と map_server。
+# 地図は AMCL と同じ config/maps/field.yaml。初期姿勢 (initial_pose_*) は bringup.launch.py が start_* から決める。
+# emcl2 は止まっていても odom_freq ごとに LiDAR で更新し、TF field -> odom を必ず出す
+# (なので state_estimator とは組み合わせない)。
+emcl2:
+  ros__parameters:
+    global_frame_id: field
+    odom_frame_id: odom
+    base_frame_id: base_link
+    footprint_frame_id: base_link
+    odom_freq: 20                 # [Hz] 更新の周期 (スキャンと同じ 20 Hz)
+    transform_tolerance: 0.1
+    laser_min_range: 0.05
+    laser_max_range: 10.0
+    scan_increment: 4             # 光線の間引き (720 本 -> 180 本。AMCL の max_beams と揃える)
+    num_particles: 500
+    alpha_threshold: 0.5          # 尤度がこれを下回ったら膨張リセット
+    expansion_radius_position: 0.1
+    expansion_radius_orientation: 0.2
+    extraction_rate: 0.1
+    range_threshold: 0.3
+    sensor_reset: false
+    # オドメトリの誤差 (AMCL の alpha 0.1 と同程度)
+    odom_fw_dev_per_fw: 0.1
+    odom_fw_dev_per_rot: 0.0001
+    odom_rot_dev_per_fw: 0.05
+    odom_rot_dev_per_rot: 0.1
+    laser_likelihood_max_dist: 0.2
+
+map_server:
+  ros__parameters:
+    frame_id: field
+    topic_name: map
+
+lifecycle_manager_map:
+  ros__parameters:
+    autostart: true
+    node_names: [map_server]
+    bond_timeout: 0.0

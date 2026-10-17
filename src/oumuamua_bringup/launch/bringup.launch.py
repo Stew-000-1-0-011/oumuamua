@@ -16,6 +16,7 @@ localization で自己位置推定のやり方を選ぶ:
                  body_odometry が機体速度を積分して TF odom -> base_link を出す。
                  estimator:=false なら AMCL が TF field -> odom を出し、
                  estimator:=true なら AMCL の推定 (/amcl_pose) を state_estimator の観測にし、state_estimator が field -> odom を出す
+  emcl         : emcl2 (膨張リセット付きの MCL)。止まっていても更新する。TF field -> odom を必ず出すので estimator:=false で使う
   gicp         : gicp_localizer (small_gicp で点群地図 config/maps/field.pcd に位置合わせ)。
                  odom とTF・estimator の扱いは amcl と同じ (推定は /gicp_localizer/pose)
 estimator:=false (localization:=sotoba) なら sotoba_ros の persistence_predictor (持続予測) が事前分布を出し、sotoba_node が TF field -> base_link を出す。
@@ -204,8 +205,10 @@ def generate_launch_description():
 
     def make_amcl(context):
         mode = localization.perform(context)
-        if mode not in ('amcl', 'gicp'):
+        if mode not in ('amcl', 'gicp', 'emcl'):
             return []
+        if mode == 'emcl' and estimator.perform(context) == 'true':
+            raise RuntimeError('localization:=emcl publishes field -> odom itself; use estimator:=false')
         odometry = Node(
             package='body_odometry',
             executable='body_odometry_node',
@@ -213,6 +216,43 @@ def generate_launch_description():
             remappings=[('~/body_velocity', body_velocity_topic(context)), ('~/odom', '/odom')],
             output='screen',
         )
+        if mode == 'emcl':
+            return [
+                odometry,
+                Node(
+                    package='nav2_map_server',
+                    executable='map_server',
+                    name='map_server',
+                    parameters=[
+                        config('oumuamua_bringup', 'emcl2.yaml'),
+                        NodeParams('map_server', {'yaml_filename': LaunchConfiguration('map')}),
+                    ],
+                    output='screen',
+                ),
+                Node(
+                    package='nav2_lifecycle_manager',
+                    executable='lifecycle_manager',
+                    name='lifecycle_manager_map',
+                    parameters=[config('oumuamua_bringup', 'emcl2.yaml')],
+                    output='screen',
+                ),
+                Node(
+                    package='emcl2',
+                    executable='emcl2_node',
+                    name='emcl2',
+                    parameters=[
+                        config('oumuamua_bringup', 'emcl2.yaml'),
+                        NodeParams('emcl2', {
+                            'initial_pose_x': start_pose['x'],
+                            'initial_pose_y': start_pose['y'],
+                            'initial_pose_a': start_pose['yaw'],
+                        }),
+                        LaunchConfiguration('overrides'),
+                    ],
+                    remappings=[('scan', '/scan'), ('map', '/map')],
+                    output='screen',
+                ),
+            ]
         if mode == 'gicp':
             return [odometry, Node(
                 package='gicp_localizer',
@@ -492,8 +532,8 @@ def generate_launch_description():
             'estimator', default_value='true',
             description='state_estimator で自己位置と速度を推定する。false なら sotoba_ros の持続予測で事前を出す'),
         DeclareLaunchArgument(
-            'localization', default_value='sotoba', choices=['sotoba', 'amcl', 'gicp'],
-            description='自己位置推定のやり方。sotoba: sotoba_node (ICP)、amcl: nav2_amcl、gicp: gicp_localizer (small_gicp)'),
+            'localization', default_value='sotoba', choices=['sotoba', 'amcl', 'emcl', 'gicp'],
+            description='自己位置推定のやり方。sotoba: sotoba_node (ICP)、amcl: nav2_amcl、emcl: emcl2、gicp: gicp_localizer (small_gicp)'),
         DeclareLaunchArgument(
             'overrides', default_value=config('oumuamua_bringup', 'overrides_empty.yaml'),
             description='自己位置推定のノード (sotoba_node・amcl・gicp_localizer・state_estimator) に最後に読ませる'

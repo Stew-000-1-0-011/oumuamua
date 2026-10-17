@@ -1,49 +1,60 @@
 # 精度と計算負荷の関係を見るための構成 (bench_run.py --variants-file で渡す)。
-# どれも state_estimator と組み合わせ (自己位置推定の方式だけが違う)、計算負荷のつまみを振る。
+# 計算負荷のつまみ:
 #   sotoba : point_stride (スキャンの点の間引き)
-#   amcl   : max_beams (使う光線の数) と粒子の数。update_min_* を 0 にすると、止まっていても毎スキャン更新する
-#   gicp   : point_stride と num_threads
-sotoba_s1:
-  description: sotoba 全点 (既定)
+#   amcl   : max_beams (使う光線の数) と粒子の数。update_min_* を 0 にすると止まっていても毎スキャン更新する (_every)
+#   emcl   : 粒子の数と scan_increment (光線の間引き)。emcl2 はもともと止まっていても更新する
+#   gicp   : point_stride (スキャンの点の間引き)。gicp_localizer はもともと毎スキャン更新する
+# _est は state_estimator と組み合わせたもの (emcl2 は TF field -> odom を必ず出すので組み合わせない)
+
+# --- 基準: sotoba + state_estimator (main) ---
+sotoba_est_s1:
   launch_args: [estimator:=true]
-sotoba_s2:
-  launch_args: [estimator:=true]
-  params: {sotoba_node: {point_stride: 2}}
-sotoba_s4:
+sotoba_est_s4:
   launch_args: [estimator:=true]
   params: {sotoba_node: {point_stride: 4}}
-sotoba_s8:
-  launch_args: [estimator:=true]
-  params: {sotoba_node: {point_stride: 8}}
 
-amcl_b60_p1000:
-  launch_args: [localization:=amcl, estimator:=true]
-  params: {amcl: {max_beams: 60, min_particles: 200, max_particles: 1000}}
-amcl_b180_p3000:
-  description: AMCL の既定 (config/amcl.yaml)
-  launch_args: [localization:=amcl, estimator:=true]
-amcl_b360_p8000:
-  launch_args: [localization:=amcl, estimator:=true]
-  params: {amcl: {max_beams: 360, min_particles: 2000, max_particles: 8000}}
-amcl_b60_p1000_every:
-  launch_args: [localization:=amcl, estimator:=true]
+# --- AMCL ---
+amcl_b180:
+  description: AMCL の既定 (動いたときだけ更新)
+  launch_args: [localization:=amcl, estimator:=false]
+amcl_b180_every:
+  launch_args: [localization:=amcl, estimator:=false]
+  params: {amcl: {update_min_d: 0.0, update_min_a: 0.0}}
+amcl_b60_every:
+  launch_args: [localization:=amcl, estimator:=false]
   params: {amcl: {max_beams: 60, min_particles: 200, max_particles: 1000, update_min_d: 0.0, update_min_a: 0.0}}
-amcl_b180_p3000_every:
+amcl_b360_every:
+  launch_args: [localization:=amcl, estimator:=false]
+  params: {amcl: {max_beams: 360, min_particles: 2000, max_particles: 8000, update_min_d: 0.0, update_min_a: 0.0}}
+amcl_est_b180_every:
   launch_args: [localization:=amcl, estimator:=true]
   params: {amcl: {update_min_d: 0.0, update_min_a: 0.0}}
-amcl_b360_p8000_every:
-  launch_args: [localization:=amcl, estimator:=true]
-  params: {amcl: {max_beams: 360, min_particles: 2000, max_particles: 8000, update_min_d: 0.0, update_min_a: 0.0}}
 
+# --- emcl2 ---
+emcl_p500_i4:
+  description: emcl2 の既定 (config/emcl2.yaml)
+  launch_args: [localization:=emcl, estimator:=false]
+emcl_p200_i4:
+  launch_args: [localization:=emcl, estimator:=false]
+  params: {emcl2: {num_particles: 200}}
+emcl_p2000_i4:
+  launch_args: [localization:=emcl, estimator:=false]
+  params: {emcl2: {num_particles: 2000}}
+emcl_p500_i1:
+  launch_args: [localization:=emcl, estimator:=false]
+  params: {emcl2: {scan_increment: 1}}
+
+# --- small_gicp ---
 gicp_s1:
-  description: small_gicp 全点・2 スレッド (既定)
-  launch_args: [localization:=gicp, estimator:=true]
+  launch_args: [localization:=gicp, estimator:=false]
 gicp_s2:
-  launch_args: [localization:=gicp, estimator:=true]
+  launch_args: [localization:=gicp, estimator:=false]
   params: {gicp_localizer: {point_stride: 2}}
 gicp_s4:
+  launch_args: [localization:=gicp, estimator:=false]
+  params: {gicp_localizer: {point_stride: 4}}
+gicp_est_s1:
+  launch_args: [localization:=gicp, estimator:=true]
+gicp_est_s4:
   launch_args: [localization:=gicp, estimator:=true]
   params: {gicp_localizer: {point_stride: 4}}
-gicp_s1_t1:
-  launch_args: [localization:=gicp, estimator:=true]
-  params: {gicp_localizer: {num_threads: 1}}

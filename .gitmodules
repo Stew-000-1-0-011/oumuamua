@@ -24,3 +24,6 @@
 [submodule "src/small_gicp"]
 	path = src/small_gicp
 	url = https://github.com/koide3/small_gicp.git
+[submodule "src/emcl2_ros2"]
+	path = src/emcl2_ros2
+	url = https://github.com/ryuichiueda/emcl2_ros2.git

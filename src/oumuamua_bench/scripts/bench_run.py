@@ -52,7 +52,7 @@ LEGS = ['start_to_shelf', 'shelf_to_start']
 GROUPS = {
     'localization': [
         'sotoba_node', 'persistence_predictor', 'state_estimator_node', 'body_odometry_node',
-        'amcl', 'map_server', 'gicp_localizer',
+        'amcl', 'map_server', 'gicp_localizer', 'emcl2_node',
     ],
     'navigation': [
         'tracker_node', 'path_follower_node', 'controller_server', 'planner_server', 'bt_navigator',
@@ -174,7 +174,7 @@ class Recorder(Node):
         self.create_subscription(TrackingReference, '/tracker_node/reference', self.on_ref, 100)
         self.create_subscription(TwistStamped, '/cmd_vel', self.on_cmd, 100)
         self.create_subscription(LaserScan, '/scan', self.on_scan, qos_profile_sensor_data)
-        for topic in ('/amcl_pose', '/gicp_localizer/pose'):
+        for topic in ('/amcl_pose', '/gicp_localizer/pose', '/mcl_pose'):
             self.create_subscription(PoseWithCovarianceStamped, topic, self.on_update, 100)
         if BeliefArray is not None:
             self.create_subscription(BeliefArray, '/sotoba_node/posterior_beliefs', self.on_update, 100)

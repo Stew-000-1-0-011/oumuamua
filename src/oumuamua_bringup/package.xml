@@ -32,6 +32,8 @@
   <exec_depend>nav2_lifecycle_manager</exec_depend>
   <!-- localization:=gicp -->
   <exec_depend>gicp_localizer</exec_depend>
+  <!-- localization:=emcl -->
+  <exec_depend>emcl2</exec_depend>
   <!-- navigation:=nav2 -->
   <exec_depend>rclpy</exec_depend>
   <exec_depend>nav2_msgs</exec_depend>
