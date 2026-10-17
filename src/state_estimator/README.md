@@ -27,12 +27,24 @@ sotoba_node と対になって動く。
 | sub | `~/body_velocity` | `geometry_msgs/msg/TwistStamped` (機体座標系。remap してつなぐ) |
 | sub | `posterior_topic` (既定 `/sotoba_node/posterior_beliefs`) | `sotoba_ros/msg/BeliefArray` |
 | sub | `initial_topic` (既定 `/sotoba_node/initial_beliefs`) | `sotoba_ros/msg/BeliefArray` (transient local。初期化と物体の位置関係に使う) |
+| sub | `~/pose_measurement` | `geometry_msgs/msg/PoseWithCovarianceStamped` (`measurement_source: pose` のとき) |
 | sub | `/initialpose` | `geometry_msgs/msg/PoseWithCovarianceStamped` (RViz の 2D Pose Estimate。その姿勢でやり直す) |
 | sub | TF `base_frame -> lidar_frame` | LiDAR の取付 |
 | pub | `~/odom` | `nav_msgs/msg/Odometry` (姿勢はフィールド座標系、速度は機体座標系) |
 | pub | TF `field_frame -> base_frame` | |
 | pub | `prior_topic` (既定 `/sotoba_node/prior_beliefs`) | `sotoba_ros/msg/BeliefArray` |
 | srv | `~/reset` | `std_srvs/srv/Trigger` (sotoba の定義上の初期姿勢でやり直す) |
+
+### sotoba 以外の観測 (`measurement_source: pose`)
+
+AMCL などの自己位置推定と組み合わせるときは、`measurement_source: pose` にして、その推定
+(`PoseWithCovarianceStamped`、フィールド座標系の機体の姿勢と共分散) を `~/pose_measurement` に remap する。
+このときは sotoba の初期姿勢を待たず `initial_pose` で初期化し、事前は出さない。
+相手の推定はたいてい自分でもオドメトリを使っているので、同じ情報を 2 回数えることになる (ここでは差し引けない)。
+
+`odom_frame` を指定すると、TF は `field_frame -> base_frame` ではなく `field_frame -> odom_frame` を出す
+(`odom_frame -> base_frame` は body_odometry などが出す。AMCL と同じ形)。
+`odom_frame -> base_frame` の最新の時刻での推定から求める。
 
 `~/odom`・TF・事前は `publish_rate` (既定 100 Hz) で出す。sotoba_node は事前を溜めておき、
 スキャン時刻以前で最新のものを使う。

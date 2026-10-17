@@ -88,6 +88,18 @@ namespace {
 			const auto initial_topic =
 				this->declare_parameter<std::string>("initial_topic", "/sotoba_node/initial_beliefs");
 			this->publish_tf_ = this->declare_parameter<bool>("publish_tf", true);
+			// 観測をどこから受けるか。
+			//   sotoba: sotoba_node の事後分布 (既定。事前分布も sotoba_node に出す)
+			//   pose  : ~/pose_measurement (PoseWithCovarianceStamped、フィールド座標系の機体の姿勢)。AMCL などと組み合わせる
+			this->measurement_source_ = this->declare_parameter<std::string>("measurement_source", "sotoba");
+			// measurement_source: pose のときの初期姿勢 [x, y, yaw] (機体、フィールド座標系)
+			const auto initial_pose = this->declare_parameter<std::vector<double>>("initial_pose", std::vector<double>{0.0, 0.0, 0.0});
+			if (initial_pose.size() == 3) {
+				this->initial_pose_ = Vec3{initial_pose[0], initial_pose[1], initial_pose[2]};
+			}
+			// 空でなければ、TF は field -> base_link ではなく field -> odom_frame を出す
+			// (odom_frame -> base_link を別のノード (body_odometry) が出しているとき。AMCL と同じ形)
+			this->odom_frame_ = this->declare_parameter<std::string>("odom_frame", "");
 			const double rate = this->declare_parameter<double>("publish_rate", 100.0);
 
 			// --- 実行中に変えられる ---
@@ -138,6 +150,15 @@ namespace {
 			this->initial_sub_ = this->create_subscription<BeliefArray>(
 				initial_topic, rclcpp::QoS{1}.transient_local(), [this](const BeliefArray& m) { this->on_initial(m); }
 			);
+			if (this->measurement_source_ == "pose") {
+				this->pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+					"~/pose_measurement", rclcpp::QoS{10},
+					[this](const geometry_msgs::msg::PoseWithCovarianceStamped& m) { this->on_pose_measurement(m); }
+				);
+			} else if (this->measurement_source_ != "sotoba") {
+				RCLCPP_WARN(this->get_logger(), "unknown measurement_source '%s'; using sotoba", this->measurement_source_.c_str());
+				this->measurement_source_ = "sotoba";
+			}
 			this->initialpose_sub_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
 				"/initialpose", rclcpp::QoS{1},
 				[this](const geometry_msgs::msg::PoseWithCovarianceStamped& m) { this->on_initialpose(m); }
@@ -301,29 +322,8 @@ namespace {
 			}
 
 			const auto meas = state_estimator::planar_measurement(scan, *this->T_base_lidar_, this->measurement_floor_);
-			const auto result = this->filter_.update(stamp.seconds(), meas.pose, meas.covariance);
-			++this->counts_[static_cast<std::size_t>(result)];
-			RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-				"posteriors: %zu accepted, %zu gated, %zu out of order; last z=(%.3f, %.3f, %.3f) sigma=(%.4f, %.4f, %.4f)",
-				this->counts_[0], this->counts_[2], this->counts_[1], meas.pose(0), meas.pose(1), meas.pose(2),
-				std::sqrt(meas.covariance(0, 0)), std::sqrt(meas.covariance(1, 1)), std::sqrt(meas.covariance(2, 2)));
-			switch (result) {
-				case UpdateResult::accepted:
-					this->last_accepted_ = this->now();
-					this->failures_ = 0;
-					if (!this->localized_) {
-						this->localized_ = true;
-						RCLCPP_INFO(this->get_logger(), "localized at (%.3f, %.3f, %.3f)", meas.pose(0), meas.pose(1), meas.pose(2));
-					}
-					break;
-				case UpdateResult::gated:
-					this->on_failure("pose measurement rejected by the gate");
-					return;
-				case UpdateResult::out_of_order:
-					RCLCPP_DEBUG(this->get_logger(), "out-of-order posterior dropped");
-					return;
-				case UpdateResult::not_initialized:
-					return;
+			if (!this->apply_measurement(stamp, meas.pose, meas.covariance)) {
+				return;
 			}
 
 			// フィールド以外の物体の、フィールドに対する位置関係を覚え直す (動かされても追いかける)
@@ -340,6 +340,64 @@ namespace {
 					}
 				}
 			}
+		}
+
+		/// 姿勢の観測をフィルタに入れる。使えたら true
+		auto apply_measurement(const rclcpp::Time& stamp, const Vec3& z, const Mat3& R) -> bool {
+			const auto result = this->filter_.update(stamp.seconds(), z, R);
+			++this->counts_[static_cast<std::size_t>(result)];
+
+			RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+				"measurements: %zu accepted, %zu gated, %zu out of order; last z=(%.3f, %.3f, %.3f) sigma=(%.4f, %.4f, %.4f)",
+				this->counts_[0], this->counts_[2], this->counts_[1], z(0), z(1), z(2),
+				std::sqrt(R(0, 0)), std::sqrt(R(1, 1)), std::sqrt(R(2, 2)));
+			switch (result) {
+				case UpdateResult::accepted:
+					this->last_accepted_ = this->now();
+					this->failures_ = 0;
+					if (!this->localized_) {
+						this->localized_ = true;
+						RCLCPP_INFO(this->get_logger(), "localized at (%.3f, %.3f, %.3f)", z(0), z(1), z(2));
+					}
+					break;
+				case UpdateResult::gated:
+					this->on_failure("pose measurement rejected by the gate");
+					return false;
+				case UpdateResult::out_of_order:
+					RCLCPP_DEBUG(this->get_logger(), "out-of-order measurement dropped");
+					return false;
+				case UpdateResult::not_initialized:
+					return false;
+			}
+			return true;
+		}
+
+		/// measurement_source: pose。機体の姿勢 (フィールド座標系) と共分散をそのまま観測にする
+		void on_pose_measurement(const geometry_msgs::msg::PoseWithCovarianceStamped& m) {
+			if (!this->filter_.initialized()) {
+				return;
+			}
+			const rclcpp::Time stamp{m.header.stamp};
+			if (this->reset_stamp_ && stamp < *this->reset_stamp_) {
+				return;
+			}
+			if (!m.header.frame_id.empty() && m.header.frame_id != this->field_frame_) {
+				RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "pose measurement is in '%s', not '%s'; ignored",
+					m.header.frame_id.c_str(), this->field_frame_.c_str());
+				return;
+			}
+			const auto& q = m.pose.pose.orientation;
+			const Vec3 z{m.pose.pose.position.x, m.pose.pose.position.y,
+				std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))};
+			// (x, y, z, roll, pitch, yaw) の 6x6 から平面の成分
+			const int idx[3]{0, 1, 5};
+			Mat3 R = Mat3::Zero();
+			for (int i = 0; i < 3; ++i) {
+				for (int j = 0; j < 3; ++j) {
+					R(i, j) = m.pose.covariance[static_cast<std::size_t>(idx[i] * 6 + idx[j])];
+				}
+			}
+			this->apply_measurement(stamp, z, R + this->measurement_floor_);
 		}
 
 		void on_failure(const char* reason) {
@@ -369,6 +427,10 @@ namespace {
 		}
 
 		auto reset_to_initial(const char* why) -> bool {
+			if (this->measurement_source_ == "pose") {
+				this->reset_to(this->initial_pose_, this->initial_cov(), why);
+				return true;
+			}
 			if (!this->field_index_ || !this->T_base_lidar_) {
 				return false;
 			}
@@ -391,6 +453,10 @@ namespace {
 		}
 
 		void try_initialize() {
+			if (this->measurement_source_ == "pose") {
+				this->reset_to_initial("initial_pose");
+				return;
+			}
 			if (!this->T_base_lidar_) {
 				try {
 					const auto tf = this->tf_buffer_->lookupTransform(this->base_frame_, this->lidar_frame_, tf2::TimePointZero);
@@ -426,7 +492,9 @@ namespace {
 			const Mat3 pose_cov = est->P.topLeftCorner<3, 3>();
 
 			// sotoba への事前は、観測が途切れていても出し続ける (不確かさが育つので探し直せる)
-			this->publish_prior(now, pose, pose_cov);
+			if (this->measurement_source_ == "sotoba") {
+				this->publish_prior(now, pose, pose_cov);
+			}
 
 			const bool fresh = this->last_accepted_ && (now - *this->last_accepted_).seconds() <= this->measurement_timeout_;
 			if (!fresh) {
@@ -490,7 +558,9 @@ namespace {
 			odom.twist.twist.angular.z = est.x(5);
 			this->odom_pub_->publish(odom);
 
-			if (this->publish_tf_) {
+			if (this->publish_tf_ && !this->odom_frame_.empty()) {
+				this->publish_odom_tf(now);
+			} else if (this->publish_tf_) {
 				geometry_msgs::msg::TransformStamped tf{};
 				tf.header = odom.header;
 				tf.child_frame_id = this->base_frame_;
@@ -499,6 +569,38 @@ namespace {
 				tf.transform.rotation = odom.pose.pose.orientation;
 				this->tf_broadcaster_->sendTransform(tf);
 			}
+		}
+
+		/// field -> odom_frame を出す。odom_frame -> base_link の最新と、同じ時刻の推定から求める
+		void publish_odom_tf(const rclcpp::Time& now) {
+			geometry_msgs::msg::TransformStamped odom_base{};
+			try {
+				odom_base = this->tf_buffer_->lookupTransform(this->odom_frame_, this->base_frame_, tf2::TimePointZero);
+			} catch (const tf2::TransformException& e) {
+				RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "no TF %s -> %s: %s",
+					this->odom_frame_.c_str(), this->base_frame_.c_str(), e.what());
+				return;
+			}
+			const auto est = this->filter_.predict(rclcpp::Time{odom_base.header.stamp}.seconds());
+			if (!est) {
+				return;
+			}
+			const auto& r = odom_base.transform.rotation;
+			const double odom_yaw = std::atan2(2.0 * (r.w * r.z + r.x * r.y), 1.0 - 2.0 * (r.y * r.y + r.z * r.z));
+			const double ox = odom_base.transform.translation.x;
+			const double oy = odom_base.transform.translation.y;
+			// T_field_odom = T_field_base * T_odom_base^-1
+			const double yaw = est->x(2) - odom_yaw;
+			const double c = std::cos(yaw);
+			const double s = std::sin(yaw);
+			geometry_msgs::msg::TransformStamped tf{};
+			tf.header.stamp = now;
+			tf.header.frame_id = this->field_frame_;
+			tf.child_frame_id = this->odom_frame_;
+			tf.transform.translation.x = est->x(0) - (c * ox - s * oy);
+			tf.transform.translation.y = est->x(1) - (s * ox + c * oy);
+			tf.transform.rotation = yaw_quaternion(yaw);
+			this->tf_broadcaster_->sendTransform(tf);
 		}
 
 		struct SentPrior {
@@ -512,6 +614,9 @@ namespace {
 		std::string lidar_frame_{};
 		std::string field_object_{};
 		bool publish_tf_{true};
+		std::string measurement_source_{"sotoba"};
+		Vec3 initial_pose_{Vec3::Zero()};
+		std::string odom_frame_{};
 		double input_delay_{};
 		double measurement_timeout_{};
 		double initial_sigma_xy_{};
@@ -544,6 +649,7 @@ namespace {
 		rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr velocity_sub_{};
 		rclcpp::Subscription<BeliefArray>::SharedPtr posterior_sub_{};
 		rclcpp::Subscription<BeliefArray>::SharedPtr initial_sub_{};
+		rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_sub_{};
 		rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initialpose_sub_{};
 		rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_{};
 		rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_{};

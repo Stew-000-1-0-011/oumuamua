@@ -10,7 +10,13 @@ state_estimator:
     posterior_topic: /sotoba_node/posterior_beliefs
     prior_topic: /sotoba_node/prior_beliefs
     initial_topic: /sotoba_node/initial_beliefs
-    publish_tf: true              # field_frame -> base_frame を出す
+    publish_tf: true              # field_frame -> base_frame を出す (odom_frame を指定したら field_frame -> odom_frame)
+    # 観測をどこから受けるか。sotoba: sotoba_node の事後 (事前も sotoba_node に出す)。
+    # pose: ~/pose_measurement (PoseWithCovarianceStamped、フィールド座標系の機体の姿勢)。AMCL などと組み合わせる
+    measurement_source: sotoba
+    initial_pose: [0.0, 0.0, 0.0] # measurement_source: pose のときの初期姿勢 [x, y, yaw] (機体)
+    # 空でなければ、TF は field_frame -> odom_frame を出す (odom_frame -> base_frame を body_odometry などが出すとき)
+    odom_frame: ""
     publish_rate: 100.0           # [Hz] ~/odom・TF・sotoba への事前を出す周期
 
     # --- 速度の入力 (~/body_velocity, TwistStamped, 機体座標系) ---
