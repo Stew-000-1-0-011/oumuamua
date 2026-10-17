@@ -6,6 +6,12 @@
 
 tracker_node の目標 (/tracker_node/reference) を出すノードはここには含まない。
 
+把持機構 (昇降 + 吸引) は gripper_count 個 (既定 2) 立てる。機構 i ごとに
+  gripper<i> (gripper_node): ~/move_lift (アクション) で昇降、~/set_suction で吸引のオン/オフ
+  -> /robomas_target<motor> -> robomas_bridge -> ロボマス
+  -> /suction<i>/target_current -> suction<i> (mini_shirasu_node、電流制御) -> mini-shirasu
+sim:=true なら gripper<i> だけを立てる (昇降は指令をそのまま高さとみなす)。
+
 estimator:=true (既定) なら state_estimator が自己位置と速度を推定し、sotoba_node には事前分布を、
 tracker_node には推定 (~/odom) を渡す。速度の入力は velocity_source で選ぶ:
   wheels  (既定): 車輪オドメトリ (chassis_node の ~/body_velocity、sim:=true なら robot_sim の ~/body_velocity)
@@ -258,6 +264,33 @@ def generate_launch_description():
         ]
     wheels = OpaqueFunction(function=make_wheels)
 
+    # --- 把持機構 (gripper<i>: 昇降と吸引のオン/オフ、suction<i>: 吸引のモータの mini-shirasu) ---
+    def make_grippers(context):
+        count = int(LaunchConfiguration('gripper_count').perform(context))
+        nodes = [
+            Node(
+                package='gripper',
+                executable='gripper_node',
+                name=f'gripper{i}',
+                parameters=[LaunchConfiguration('gripper_params')],
+                output='screen',
+            )
+            for i in range(count)
+        ]
+        if sim.perform(context) != 'true':
+            nodes += [
+                Node(
+                    package='mini_shirasu_ros',
+                    executable='mini_shirasu_node',
+                    name=f'suction{i}',
+                    parameters=[LaunchConfiguration('suction_params')],
+                    output='screen',
+                )
+                for i in range(count)
+            ]
+        return nodes
+    grippers = OpaqueFunction(function=make_grippers)
+
     # --- USB-CAN (robomas_plugins) ---
     robomas = ComposableNodeContainer(
         package='rclcpp_components',
@@ -332,6 +365,15 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'mini_shirasu_params', default_value=config('oumuamua_bringup', 'mini_shirasu.yaml'),
             description='mini_shirasu_node (wheel0..) のパラメータファイル'),
+        DeclareLaunchArgument(
+            'gripper_count', default_value='2',
+            description='把持機構 (gripper<i> と suction<i>) の数。0 なら立てない'),
+        DeclareLaunchArgument(
+            'gripper_params', default_value=config('oumuamua_bringup', 'gripper.yaml'),
+            description='gripper_node (gripper0..) のパラメータファイル'),
+        DeclareLaunchArgument(
+            'suction_params', default_value=config('oumuamua_bringup', 'suction.yaml'),
+            description='吸引の mini_shirasu_node (suction0..) のパラメータファイル'),
         DeclareLaunchArgument('bridge', default_value='true', description='robomas_bridge (USB-CAN) を起動する'),
         DeclareLaunchArgument('rviz', default_value='false', description='RViz2 を起動する'),
         DeclareLaunchArgument(
@@ -361,6 +403,7 @@ def generate_launch_description():
         path_follower,
         chassis,
         wheels,
+        grippers,
         robomas,
         robot_sim,
         rviz_node,

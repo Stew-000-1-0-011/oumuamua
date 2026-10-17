@@ -1,0 +1,56 @@
+# 把持機構 (昇降 + 吸引) の gripper_node のパラメータ。機構 i ごとに
+# - gripper<i>: gripper_node (昇降のロボマス + 吸引のオン/オフ)
+# - suction<i>: mini_shirasu_node (吸引のモータを電流制御)
+# を立てる。suction<i> のパラメータは suction.yaml。
+# 項目の意味は gripper/config/gripper_node.yaml と mini_shirasu_ros の README を参照。
+#
+# !!! 実機に合わせて決めること !!!
+# - lift.motor / lift.c620: ロボマスの ID と ESC の種類
+# - lift.target_scale: ボードの位置目標の単位 [?/m]
+# - lift.meters_per_output_revolution: 出力軸 1 回転で上がる高さ (0 ならフィードバックを使わない)
+# - lift.max_height: 昇降の行程
+# - suction.current と suction<i> の settings.imax: 吸引モータの許容電流
+# - suction<i> の can_id は suction.yaml
+
+# --- 全機構共通 ---
+/**:
+  ros__parameters:
+    control_rate: 50.0
+    lift:
+      c620: false
+      vel_kp: 0.15
+      vel_ki: 9.0
+      pos_kp: 0.5
+      temperature_limit: 50
+      enable_on_start: true
+      config_repeat: 3
+      target_scale: 1.0
+      target_offset: 0.0
+      gear_ratio: 36.0
+      meters_per_output_revolution: 0.0
+      feedback_timeout: 0.2
+      min_height: 0.0
+      max_height: 0.3
+      max_speed: 0.2
+      tolerance: 0.005
+      settle_time: 0.2
+      timeout_margin: 2.0
+    suction:
+      current: 0.0
+    robomas_frame_topic: /robomas_frame
+    can_rx_topic: /robomas_can_rx
+
+gripper0:
+  ros__parameters:
+    lift:
+      motor: 1
+    suction:
+      target_topic: /suction0/target_current
+
+gripper1:
+  ros__parameters:
+    lift:
+      motor: 2
+    suction:
+      target_topic: /suction1/target_current
+

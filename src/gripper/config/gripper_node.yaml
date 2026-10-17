@@ -1,0 +1,45 @@
+# gripper_node のパラメータ (把持機構 1 つぶん)。機構ごとにノード名を変えて立てる
+# (oumuamua_bringup/config/gripper.yaml を参照)。すべて起動時のみ読む。
+gripper:
+  ros__parameters:
+    control_rate: 50.0          # [Hz] 位置の目標・吸引の電流・状態を送る周期
+
+    lift:
+      # --- ロボマスとボードの位置制御 (RobomasFrame) ---
+      motor: 1                  # ロボマスの ID (1..8)。robomas_target<motor> に目標を送る
+      c620: false               # true: C620 (M3508)、false: C610 (M2006)
+      vel_kp: 0.15
+      vel_ki: 9.0
+      pos_kp: 0.5
+      temperature_limit: 50     # [℃]
+      enable_on_start: true     # false なら ~/enable_lift で有効にするまで無効のまま
+      config_repeat: 3          # 起動直後、ブリッジがつながるまで設定を 1 s ごとに送り直す回数
+
+      # --- 高さ [m] とボードの目標の関係 ---
+      # 高さは起動時の位置を 0 とし、ボードには target_scale * 高さ + target_offset を送る。
+      # !!! ボードの位置目標の単位 (と起動時の基準) に合わせて決めること !!!
+      target_scale: 1.0
+      target_offset: 0.0
+
+      # --- フィードバック (CAN 0x200 + motor が robomas_can_rx に届くとき) ---
+      # meters_per_output_revolution が 0 ならフィードバックは使わず、送っている指令を高さとみなす
+      gear_ratio: 36.0          # ロータの回転 / 出力軸の回転 (M2006 は 36、M3508 は 3591/187)
+      meters_per_output_revolution: 0.0  # [m] 出力軸 1 回転で上がる高さ (プーリなら π × 直径)
+      feedback_timeout: 0.2     # [s]
+
+      # --- 動かし方 ---
+      min_height: 0.0           # [m] ゴールはこの範囲に丸める
+      max_height: 0.3           # [m]
+      max_speed: 0.2            # [m/s] 位置の目標をこの速さでゴールへ動かす
+      tolerance: 0.005          # [m] フィードバックがあるとき、ゴールとの差がこれ以内なら着いた
+      settle_time: 0.2          # [s] 着いた状態がこれだけ続いたら成功
+      timeout_margin: 2.0       # [s] 距離 / max_speed にこれを足した時間で着かなければ失敗
+
+    suction:
+      # mini_shirasu_node (mode: current) の ~/target_current。オンでこの電流、オフで 0 A を送り続ける
+      target_topic: /suction/target_current
+      current: 0.0              # [A] !!! モータ・ポンプの許容電流のぎりぎり手前にする !!!
+
+    robomas_frame_topic: /robomas_frame
+    robomas_target_topic: ""    # 空なら /robomas_target<motor>
+    can_rx_topic: /robomas_can_rx
