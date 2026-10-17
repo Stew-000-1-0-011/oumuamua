@@ -25,6 +25,11 @@
   <exec_depend>state_estimator</exec_depend>
   <exec_depend>path_follower</exec_depend>
   <exec_depend>robomas_plugins</exec_depend>
+  <!-- localization:=amcl -->
+  <exec_depend>body_odometry</exec_depend>
+  <exec_depend>nav2_amcl</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -6,3 +6,9 @@ sotoba_est:
 sotoba_pp:
   description: sotoba_node + 持続予測 (persistence_predictor)。state_estimator なし
   launch_args: [estimator:=false]
+amcl:
+  description: nav2_amcl + 車輪オドメトリ (body_odometry)。state_estimator なし
+  launch_args: [localization:=amcl, estimator:=false]
+amcl_est:
+  description: nav2_amcl の推定を state_estimator の観測にする
+  launch_args: [localization:=amcl, estimator:=true]

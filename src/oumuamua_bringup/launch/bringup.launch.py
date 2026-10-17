@@ -10,7 +10,13 @@ estimator:=true (既定) なら state_estimator が自己位置と速度を推�
 tracker_node には推定 (~/odom) を渡す。速度の入力は velocity_source で選ぶ:
   wheels  (既定): 車輪オドメトリ (chassis_node の ~/body_velocity、sim:=true なら robot_sim の ~/body_velocity)
   cmd_vel        : tracker_node の指令 (下位の速度制御の遅れを cmd_tau で与える)
-estimator:=false なら sotoba_ros の persistence_predictor (持続予測) が事前分布を出し、sotoba_node が TF field -> base_link を出す。
+localization で自己位置推定のやり方を選ぶ:
+  sotoba (既定): sotoba_node (ICP)。下の estimator と組み合わせる
+  amcl         : nav2_amcl (パーティクルフィルタ) と map_server (config/maps/field.yaml)。
+                 body_odometry が機体速度を積分して TF odom -> base_link を出す。
+                 estimator:=false なら AMCL が TF field -> odom を出し、
+                 estimator:=true なら AMCL の推定 (/amcl_pose) を state_estimator の観測にし、state_estimator が field -> odom を出す
+estimator:=false (localization:=sotoba) なら sotoba_ros の persistence_predictor (持続予測) が事前分布を出し、sotoba_node が TF field -> base_link を出す。
 
 sim:=true なら、/cmd_vel から先 (足回り・モータドライバ・USB-CAN・LiDAR) の代わりに
 oumuamua_sim の robot_sim を立てる。robot_sim は /cmd_vel で動き、/scan を出す。
@@ -49,6 +55,7 @@ class NodeParams(Substitution):
     ノード名で書かれた値に負ける (ros_arguments の -p はさらにパラメータファイルより前に並ぶ)。
     上書きしたい値は、これを parameters の最後に置いて渡す。
     値はサブスティテューションでもよく、展開した文字列を YAML として読む ('true' -> bool など)。
+    辞書を入れ子にすると、入れ子のパラメータ (initial_pose.x など) になる。
     """
 
     def __init__(self, node_name, params):
@@ -57,13 +64,14 @@ class NodeParams(Substitution):
         self.params = params
 
     def perform(self, context):
-        values = {}
-        for key, value in self.params.items():
+        def resolve(value):
+            if isinstance(value, dict):
+                return {k: resolve(v) for k, v in value.items()}
             if isinstance(value, (bool, int, float)):
-                values[key] = value
-            else:
-                text = perform_substitutions(context, normalize_to_list_of_substitutions(value))
-                values[key] = yaml.safe_load(text)
+                return value
+            return yaml.safe_load(perform_substitutions(context, normalize_to_list_of_substitutions(value)))
+
+        values = resolve(self.params)
         with tempfile.NamedTemporaryFile('w', prefix=f'{self.node_name}_', suffix='.yaml', delete=False) as f:
             yaml.safe_dump({self.node_name: {'ros__parameters': values}}, f)
             return f.name
@@ -77,6 +85,12 @@ def generate_launch_description():
     sim = LaunchConfiguration('sim')
     estimator = LaunchConfiguration('estimator')
     velocity_source = LaunchConfiguration('velocity_source')
+    localization = LaunchConfiguration('localization')
+    use_sotoba = IfCondition(PythonExpression(["'", localization, "' == 'sotoba'"]))
+    use_amcl = IfCondition(PythonExpression(["'", localization, "' == 'amcl'"]))
+    # 機体 (base_link) の初期姿勢。sotoba 以外の自己位置推定に渡す
+    # (パラメータは double なので、'0' のような整数の書き方でも float にする)
+    start_pose = {k: PythonExpression(['float(', LaunchConfiguration(f'start_{k}'), ')']) for k in ('x', 'y', 'yaw')}
     # 文字列 'true' / 'false' を、パラメータとして bool で渡すための式
     not_estimator = PythonExpression(["'", estimator, "' != 'true'"])
     # 実機でだけ立てるもの
@@ -152,6 +166,7 @@ def generate_launch_description():
             }),
         ],
         output='screen',
+        condition=use_sotoba,
     )
     # sotoba_node は予測をしないので、事前分布を出すノードが要る。
     # estimator:=true なら state_estimator、false なら sotoba_ros の持続予測 (機体の動きは知らない)
@@ -169,8 +184,56 @@ def generate_launch_description():
             ('initial_beliefs', '/sotoba_node/initial_beliefs'),
         ],
         output='screen',
-        condition=IfCondition(not_estimator),
+        condition=IfCondition(PythonExpression(["'", estimator, "' != 'true' and '", localization, "' == 'sotoba'"])),
     )
+
+    # --- localization:=amcl ---
+    def body_velocity_topic(context):
+        return '/robot_sim/body_velocity' if sim.perform(context) == 'true' else '/chassis_node/body_velocity'
+
+    def make_amcl(context):
+        if localization.perform(context) != 'amcl':
+            return []
+        return [
+            Node(
+                package='body_odometry',
+                executable='body_odometry_node',
+                name='body_odometry',
+                remappings=[('~/body_velocity', body_velocity_topic(context)), ('~/odom', '/odom')],
+                output='screen',
+            ),
+            Node(
+                package='nav2_map_server',
+                executable='map_server',
+                name='map_server',
+                parameters=[
+                    config('oumuamua_bringup', 'amcl.yaml'),
+                    NodeParams('map_server', {'yaml_filename': LaunchConfiguration('map')}),
+                ],
+                output='screen',
+            ),
+            Node(
+                package='nav2_amcl',
+                executable='amcl',
+                name='amcl',
+                parameters=[
+                    config('oumuamua_bringup', 'amcl.yaml'),
+                    NodeParams('amcl', {
+                        'initial_pose': {**start_pose, 'z': 0.0},
+                        'tf_broadcast': not_estimator,
+                    }),
+                ],
+                output='screen',
+            ),
+            Node(
+                package='nav2_lifecycle_manager',
+                executable='lifecycle_manager',
+                name='lifecycle_manager_localization',
+                parameters=[config('oumuamua_bringup', 'amcl.yaml')],
+                output='screen',
+            ),
+        ]
+    amcl = OpaqueFunction(function=make_amcl)
 
     # --- 状態推定 (state_estimator) ---
     def make_estimator(context):
@@ -186,15 +249,26 @@ def generate_launch_description():
             tau = float(LaunchConfiguration('cmd_tau').perform(context))
             params.append(NodeParams('state_estimator', {'filter.tau_linear': tau, 'filter.tau_angular': tau}))
         elif source == 'wheels':
-            velocity_topic = '/robot_sim/body_velocity' if sim.perform(context) == 'true' else '/chassis_node/body_velocity'
+            velocity_topic = body_velocity_topic(context)
         else:
             raise RuntimeError(f"velocity_source must be 'wheels' or 'cmd_vel': {source}")
+        remappings = [('~/body_velocity', velocity_topic)]
+        if localization.perform(context) == 'amcl':
+            # AMCL の推定を観測にする。TF は body_odometry の odom -> base_link の上に field -> odom を出す
+            params.append(NodeParams('state_estimator', {
+                'measurement_source': 'pose',
+                'odom_frame': 'odom',
+                'initial_pose': PythonExpression([
+                    '[float(', LaunchConfiguration('start_x'), '), float(', LaunchConfiguration('start_y'),
+                    '), float(', LaunchConfiguration('start_yaw'), ')]']),
+            }))
+            remappings.append(('~/pose_measurement', '/amcl_pose'))
         return [Node(
             package='state_estimator',
             executable='state_estimator_node',
             name='state_estimator',
             parameters=params,
-            remappings=[('~/body_velocity', velocity_topic)],
+            remappings=remappings,
             output='screen',
         )]
     state_estimator = OpaqueFunction(function=make_estimator)
@@ -339,6 +413,18 @@ def generate_launch_description():
             'estimator', default_value='true',
             description='state_estimator で自己位置と速度を推定する。false なら sotoba_ros の持続予測で事前を出す'),
         DeclareLaunchArgument(
+            'localization', default_value='sotoba', choices=['sotoba', 'amcl'],
+            description='自己位置推定のやり方。sotoba: sotoba_node (ICP)、amcl: nav2_amcl'),
+        DeclareLaunchArgument(
+            'map', default_value=config('oumuamua_bringup', 'maps/field.yaml'),
+            description='localization:=amcl の地図 (nav2_map_server の yaml)'),
+        DeclareLaunchArgument(
+            'start_x', default_value='-2.2',
+            description='機体 (base_link) の初期位置 [m]。sotoba 以外の自己位置推定に渡す。'
+                        'sotoba_node.yaml の start_* (LiDAR の姿勢) と同じ置き場所にすること'),
+        DeclareLaunchArgument('start_y', default_value='1.3', description='同上'),
+        DeclareLaunchArgument('start_yaw', default_value='0.0', description='同上 [rad]'),
+        DeclareLaunchArgument(
             'velocity_source', default_value='wheels', choices=['wheels', 'cmd_vel'],
             description='state_estimator の速度入力。wheels: 車輪オドメトリ、cmd_vel: 指令値'),
         DeclareLaunchArgument(
@@ -360,6 +446,7 @@ def generate_launch_description():
         lidar_tf,
         sotoba,
         persistence_predictor,
+        amcl,
         state_estimator,
         tracker,
         path_follower,

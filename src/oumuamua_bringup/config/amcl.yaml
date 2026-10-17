@@ -1,0 +1,63 @@
+# localization:=amcl のときの nav2_amcl (と map_server)。
+# 地図は config/maps/field.yaml (sotoba_node のモデルと同じ壁だけの地図。oumuamua_sim の make_field_map で作る)。
+# 初期姿勢 (initial_pose)・TF を出すか (tf_broadcast) は bringup.launch.py が start_* と estimator 引数で決める。
+amcl:
+  ros__parameters:
+    robot_model_type: nav2_amcl::OmniMotionModel
+    global_frame_id: field
+    odom_frame_id: odom
+    base_frame_id: base_link
+    scan_topic: /scan
+    map_topic: /map
+    set_initial_pose: true
+    always_reset_initial_pose: false
+    first_map_only: true
+
+    # --- 粒子 ---
+    min_particles: 500
+    max_particles: 3000
+    pf_err: 0.05
+    pf_z: 0.99
+    resample_interval: 1
+    # 見失ったときにランダムな粒子を足す仕組み (0 で無効)。比較では使わない
+    recovery_alpha_fast: 0.0
+    recovery_alpha_slow: 0.0
+
+    # --- 更新の間隔 (動いた量)。既定 (0.25 m / 0.2 rad) は速く走る機体には粗いので細かくする ---
+    update_min_d: 0.02
+    update_min_a: 0.05
+
+    # --- 動きのモデル (オドメトリの誤差)。車輪オドメトリは数 % 程度で合っている ---
+    alpha1: 0.1
+    alpha2: 0.1
+    alpha3: 0.1
+    alpha4: 0.1
+    alpha5: 0.1
+
+    # --- LiDAR のモデル ---
+    laser_model_type: likelihood_field
+    laser_min_range: 0.05
+    laser_max_range: 10.0
+    max_beams: 180
+    sigma_hit: 0.03
+    z_hit: 0.8
+    z_rand: 0.2
+    z_max: 0.0
+    z_short: 0.0
+    laser_likelihood_max_dist: 0.5
+    do_beamskip: false
+
+    # 未来の時刻を付けた field -> odom を出す幅 [s]。大きいと TF の時刻が実際とずれる
+    transform_tolerance: 0.1
+    save_pose_rate: 0.0
+
+map_server:
+  ros__parameters:
+    frame_id: field
+    topic_name: map
+
+lifecycle_manager_localization:
+  ros__parameters:
+    autostart: true
+    node_names: [map_server, amcl]
+    bond_timeout: 0.0
