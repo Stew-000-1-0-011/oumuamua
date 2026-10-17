@@ -24,7 +24,8 @@ controller_server:
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 0.3
+    # MPPI が解けない (Optimizer fail) のがこれ [s] 続いたらやめる。狭い通路ではときどき解けないので長めにする
+    failure_tolerance: 2.0
     odom_topic: /odom
     progress_checker_plugins: [progress_checker]
     goal_checker_plugins: [general_goal_checker]
@@ -34,12 +35,13 @@ controller_server:
       plugin: nav2_controller::SimpleProgressChecker
       required_movement_radius: 0.3
       movement_time_allowance: 10.0
-    # bench は終点から 5 cm 以内に入ったら着いたとみなすので、それより狭くする
+    # スタート地点は外周の壁際 (機体の縁から壁まで 4 cm) で、MPPI は障害物のコストで最後の数 cm を詰めきれない。
+    # 5 cm だと手前で止まって「進まない」で打ち切られるので 8 cm にする (bench は実際の終点の誤差を別に測る)
     general_goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
       stateful: true
-      xy_goal_tolerance: 0.03
-      yaw_goal_tolerance: 0.05
+      xy_goal_tolerance: 0.08
+      yaw_goal_tolerance: 0.1
     PathHandler:
       plugin: nav2_controller::FeasiblePathHandler
       prune_distance: 2.0
@@ -65,15 +67,18 @@ controller_server:
       ay_max: 1.0
       ay_min: -1.0
       az_max: 3.5
-      vx_std: 0.2
-      vy_std: 0.2
-      wz_std: 0.4
+      # 試す速度のばらつき。小さいと速度を上げきれない (既定の 0.2 では 0.4 m/s 止まりだった)
+      vx_std: 0.4
+      vy_std: 0.4
+      wz_std: 0.6
       visualize: false
       regenerate_noises: true
       TrajectoryValidator:
         plugin: mppi::DefaultOptimalTrajectoryValidator
-        collision_lookahead_time: 2.0
-        consider_footprint: true
+        # 通路が狭いので、2 s 先まで外形で衝突を調べると MPPI がやり直し (soft reset) を繰り返して進まない。
+        # 衝突は CostCritic (外形で評価) に任せ、ここは 0.5 s 先を円で見るだけにする
+        collision_lookahead_time: 0.5
+        consider_footprint: false
       critics: [ConstraintCritic, CostCritic, GoalCritic, GoalAngleCritic, PathAlignCritic, PathFollowCritic, PathAngleCritic]
       ConstraintCritic:
         enabled: true
@@ -202,7 +207,7 @@ planner_server:
     costmap_update_timeout: 1.0
     GridBased:
       plugin: nav2_smac_planner::SmacPlanner2D
-      tolerance: 0.05
+      tolerance: 0.1
       downsample_costmap: false
       allow_unknown: false
       max_planning_time: 1.0

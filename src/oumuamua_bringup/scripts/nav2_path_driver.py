@@ -18,6 +18,7 @@ Nav2 は時刻つきの目標を出さないので、`reference_topic` (Tracking
 """
 
 import math
+import threading
 from pathlib import Path as FsPath
 
 import rclpy
@@ -27,6 +28,8 @@ from holonomic_tracker.msg import TrackingReference
 from nav2_msgs.action import FollowPath, NavigateThroughPoses
 from nav_msgs.msg import Path
 from rclpy.action import ActionClient
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from std_srvs.srv import Trigger
 
@@ -56,14 +59,19 @@ class Nav2PathDriver(Node):
         self.ref_pub = self.create_publisher(TrackingReference, reference_topic, 10)
         self.path_pub = self.create_publisher(Path, '~/path', rclpy.qos.QoSProfile(
             depth=1, durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL))
-        self.follow = ActionClient(self, FollowPath, 'follow_path')
-        self.through = ActionClient(self, NavigateThroughPoses, 'navigate_through_poses')
+        self.follow = ActionClient(self, FollowPath, 'follow_path', callback_group=ReentrantCallbackGroup())
+        self.through = ActionClient(self, NavigateThroughPoses, 'navigate_through_poses',
+                                    callback_group=ReentrantCallbackGroup())
         self.goal_handle = None
+        # サービスの中でゴールが受け付けられるのを待つので、ほかのコールバックを別のスレッドで回す
+        group = ReentrantCallbackGroup()
         for i, name in enumerate(names):
-            self.create_service(Trigger, f'~/start/{name}', lambda req, res, n=name: self.on_start(n, res))
+            self.create_service(Trigger, f'~/start/{name}', lambda req, res, n=name: self.on_start(n, res),
+                                callback_group=group)
             if i == 0:
-                self.create_service(Trigger, '~/start', lambda req, res, n=name: self.on_start(n, res))
-        self.create_service(Trigger, '~/stop', lambda req, res: self.on_stop(res))
+                self.create_service(Trigger, '~/start', lambda req, res, n=name: self.on_start(n, res),
+                                    callback_group=group)
+        self.create_service(Trigger, '~/stop', lambda req, res: self.on_stop(res), callback_group=group)
         self.get_logger().info(f'mode {self.mode}, paths: {", ".join(names)}')
 
     def pose(self, x, y, yaw):
@@ -112,17 +120,16 @@ class Nav2PathDriver(Node):
             goal.poses.header.stamp = self.get_clock().now().to_msg()
             goal.poses.goals = poses
             future = self.through.send_goal_async(goal)
-        future.add_done_callback(lambda f, n=name: self.on_accepted(n, f))
+        # 受け付けられたかを待ってから答える (Nav2 が立ち上がりきる前は断られる。呼んだ側はやり直せばよい)
+        done = threading.Event()
+        future.add_done_callback(lambda _: done.set())
+        if not done.wait(timeout=5.0) or not future.result().accepted:
+            res.success, res.message = False, f'Nav2 did not accept {name}'
+            return res
+        self.goal_handle = future.result()
+        self.goal_handle.get_result_async().add_done_callback(lambda f, n=name: self.on_result(n, f))
         res.success, res.message = True, f'sent {name} to Nav2 ({self.mode})'
         return res
-
-    def on_accepted(self, name, future):
-        handle = future.result()
-        if not handle.accepted:
-            self.get_logger().error(f'{name}: goal rejected')
-            return
-        self.goal_handle = handle
-        handle.get_result_async().add_done_callback(lambda f, n=name: self.on_result(n, f))
 
     def on_result(self, name, future):
         status = future.result().status
@@ -146,7 +153,9 @@ class Nav2PathDriver(Node):
 
 def main():
     rclpy.init()
-    rclpy.spin(Nav2PathDriver())
+    executor = MultiThreadedExecutor()
+    executor.add_node(Nav2PathDriver())
+    executor.spin()
 
 
 if __name__ == '__main__':
