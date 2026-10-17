@@ -2,8 +2,9 @@
 # 経路ファイルの場所 (path_dir = config/paths) と自己位置のトピック (odom_topic) は bringup.launch.py が決める。
 path_follower:
   ros__parameters:
-    # config/paths の下の経路。~/start/<名前> で走り出す (~/start は最初の経路)
-    paths: [start_to_shelf, shelf_to_start]
+    # config/paths の下の経路。~/start/<名前> で走り出す (~/start は最初の経路)。
+    # slalom_forward / slalom_backward は task_commander がスラロームの往復に使う (~/follow で名前を指定)
+    paths: [start_to_shelf, shelf_to_start, slalom_forward, slalom_backward]
 
     # 実機で走らせて決めた値 (2026-10-12)。壁には当たらずに走れている。
     # 所要時間はほぼ曲がり角の速さ (max_lateral_accel と max_yaw_rate の厳しいほう) で決まる。

@@ -144,9 +144,30 @@ namespace {
 		} catch (const std::invalid_argument&) { threw = true; }
 		check(threw, "a row that is not three numbers is an error");
 	}
-}
+
+	void test_polyline_path() {
+		// (0,0,0) -> (1,0,pi/2) -> (1,1,-pi) の 2 辺。-pi は pi/2 から近いほう (+pi) へ回る
+		const auto p = polyline_path({{0.0, 0.0, 0.0}, {1.0, 0.0, std::numbers::pi / 2}, {1.0, 1.0, -std::numbers::pi}}, 0.1);
+		check(p.size() == 21, "each side is split at the spacing");
+		check(near(p[10].x, 1.0, 1e-12) && near(p[10].y, 0.0, 1e-12) && near(p[10].yaw, std::numbers::pi / 2, 1e-12), "passes the corner");
+		check(near(p[5].yaw, std::numbers::pi / 4, 1e-12), "yaw turns evenly along a side");
+		check(near(p.back().yaw, std::numbers::pi, 1e-12), "yaw is unwrapped to the nearer way round");
+		bool rejected = false;
+		try {
+			polyline_path({{0.0, 0.0, 0.0}, {0.0, 0.0, 1.0}}, 0.1);
+		} catch (const std::invalid_argument&) {
+			rejected = true;
+		}
+		check(rejected, "turning on the spot is rejected");
+		const auto q = polyline_path({{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.05, 0.0, 0.0}}, 0.1);
+		check(q.size() == 2, "a repeated vertex with the same yaw is skipped");
+		const Trajectory t{p, Limits{}};
+		check(t.sample(t.duration()).finished, "the polyline can be followed");
+	}
+} // namespace
 
 auto main() -> int {
+	test_polyline_path();
 	test_trapezoid_on_a_long_line();
 	test_triangle_on_a_short_line();
 	test_ends_at_rest_and_stays();

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
-project(path_follower CXX)
+# rosidl は C のターゲットも作るので C も有効にする
+project(path_follower C CXX)
 
 if(NOT CMAKE_CXX_STANDARD)
 	set(CMAKE_CXX_STANDARD 26)
@@ -22,6 +23,15 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(holonomic_tracker REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+# --- アクション ---
+rosidl_generate_interfaces(${PROJECT_NAME}
+	"action/FollowPath.action"
+)
+rosidl_get_typesupport_target(path_follower_interfaces_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+ament_export_dependencies(rosidl_default_runtime)
 
 # --- 経路の読み込みと速度計画 (ROS非依存) ---
 add_library(path_follower_core STATIC
@@ -41,7 +51,9 @@ add_executable(path_follower_node
 target_link_libraries(path_follower_node
 	PRIVATE
 		path_follower_core
+		${path_follower_interfaces_target}
 		rclcpp::rclcpp
+		rclcpp_action::rclcpp_action
 		${geometry_msgs_TARGETS}
 		${nav_msgs_TARGETS}
 		${std_srvs_TARGETS}

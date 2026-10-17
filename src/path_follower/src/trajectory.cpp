@@ -6,6 +6,7 @@
 #include <cmath>
 #include <istream>
 #include <limits>
+#include <numbers>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -105,6 +106,38 @@ namespace path_follower {
 			.s = this->s_[i] + along,
 			.finished = false,
 		};
+	}
+
+	auto polyline_path(const std::vector<PathPoint>& vertices, const double spacing) -> std::vector<PathPoint> {
+		if (!(spacing > 0.0)) { throw std::invalid_argument("spacing must be positive"); }
+		std::vector<PathPoint> points{};
+		if (vertices.empty()) { throw std::invalid_argument("a path needs at least two points"); }
+		PathPoint last = vertices.front();
+		points.push_back(last);
+		for (std::size_t i = 1; i < vertices.size(); ++i) {
+			PathPoint next = vertices[i];
+			// 前の頂点から近いほうへ回る
+			next.yaw = last.yaw + std::remainder(next.yaw - last.yaw, 2.0 * std::numbers::pi);
+			const double length = std::hypot(next.x - last.x, next.y - last.y);
+			if (!(length > 1e-6)) {
+				if (std::abs(next.yaw - last.yaw) > 1e-6) {
+					throw std::invalid_argument("vertices at the same position with different yaw (turning on the spot is not supported)");
+				}
+				continue;
+			}
+			const auto n = static_cast<std::size_t>(std::ceil(length / spacing));
+			for (std::size_t k = 1; k <= n; ++k) {
+				const double t = static_cast<double>(k) / static_cast<double>(n);
+				points.push_back(PathPoint{
+					.x = last.x + t * (next.x - last.x),
+					.y = last.y + t * (next.y - last.y),
+					.yaw = last.yaw + t * (next.yaw - last.yaw),
+				});
+			}
+			last = next;
+		}
+		if (points.size() < 2) { throw std::invalid_argument("a path needs at least two points at different positions"); }
+		return points;
 	}
 
 	auto load_path_csv(std::istream& in) -> std::vector<PathPoint> {

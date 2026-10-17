@@ -25,4 +25,11 @@ path_follower:
     max_tracking_error: 0.15
     odom_timeout: 0.5          # [s] 自己位置がこれより古ければ「無い」とみなす
     hold_at_goal: true         # 終点に着いた後も終点を出し続けて、そこに留まる
+    spacing: 0.01              # [m] ~/follow で経由点をつなぐときの点の間隔
+    # ~/follow の成功の条件: 目標が終点に着いた後、自己位置が終点から goal_tolerance [m]・goal_yaw_tolerance [rad]
+    # 以内に goal_settle_time [s] 留まる。目標が終点に着いてから goal_timeout [s] 経っても留まらなければ失敗
+    goal_tolerance: 0.03
+    goal_yaw_tolerance: 0.05
+    goal_settle_time: 0.2
+    goal_timeout: 3.0
     auto_start: false          # true なら ~/start を待たずに走り出す (始点の確認はしない)

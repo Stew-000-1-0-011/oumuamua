@@ -57,6 +57,19 @@ ros2 service call /path_follower/stop std_srvs/srv/Trigger     # 目標を出す
 | sub | `odom_topic` (既定 `/state_estimator/odom`) | `nav_msgs/msg/Odometry` (自己位置) |
 | srv | `~/start/<名前>`, `~/start` | `std_srvs/srv/Trigger` (その経路の始点から走り出す。`~/start` は最初の経路) |
 | srv | `~/stop` | `std_srvs/srv/Trigger` |
+| action | `~/follow` | `path_follower/action/FollowPath` (下の「アクション」) |
+
+### アクション `~/follow`
+
+経路を走り、終点で止まるまでを 1 つのゴールにする。task_commander が使う。
+
+- `route` に `paths` の名前を書くと、その経路を走る (始点の確認は `~/start` と同じ)
+- `route` が空なら、今の自己位置から `(x[i], y[i], yaw[i])` を順に直線でつないだ経路を作って走る。
+  向きは各辺の上で一定の割合で回す。頂点では曲率の上限で遅くなる。その場での旋回はできない (位置が同じで向きだけ違う頂点は失敗)
+- `max_speed` (0 でなければ) で `limits.max_speed` をさらに下げる
+- 成功: 目標が終点に着いた後、自己位置が `goal_tolerance` [m]・`goal_yaw_tolerance` [rad] 以内に `goal_settle_time` [s] 留まった。
+  `goal_timeout` [s] 経っても留まらなければ失敗
+- 走っている途中に新しいゴール・`~/start`・`~/stop` が来たら、前のゴールは打ち切る。取り消すと目標を出すのをやめる (追従ノードが止める)
 
 ### 速度計画
 

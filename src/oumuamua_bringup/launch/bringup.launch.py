@@ -12,6 +12,9 @@ tracker_node の目標 (/tracker_node/reference) を出すノードはここに�
   -> /suction<i>/target_current -> suction<i> (mini_shirasu_node、電流制御) -> mini-shirasu
 sim:=true なら gripper<i> だけを立てる (昇降は指令をそのまま高さとみなす)。
 
+task_commander は ~/run (task_commander/action/RunTask) で作業 (ブロックの回収、スラロームの往復、
+棚への配置、各地点への移動) を 1 つずつ受け、path_follower の ~/follow と gripper<i> を動かす。
+
 estimator:=true (既定) なら state_estimator が自己位置と速度を推定し、sotoba_node には事前分布を、
 tracker_node には推定 (~/odom) を渡す。速度の入力は velocity_source で選ぶ:
   wheels  (既定): 車輪オドメトリ (chassis_node の ~/body_velocity、sim:=true なら robot_sim の ~/body_velocity)
@@ -291,6 +294,22 @@ def generate_launch_description():
         return nodes
     grippers = OpaqueFunction(function=make_grippers)
 
+    # --- 作業の指示 (task_commander: ~/run で作業を 1 つずつ受け、path_follower と gripper<i> を動かす) ---
+    task_commander = Node(
+        package='task_commander',
+        executable='task_commander_node',
+        name='task_commander',
+        parameters=[
+            config('oumuamua_bringup', 'task_commander.yaml'),
+            NodeParams('task_commander', {
+                'odom_topic': PythonExpression(
+                    ["'/state_estimator/odom' if '", estimator, "' == 'true' else '/tracker_node/odom'"]),
+            }),
+        ],
+        output='screen',
+        condition=IfCondition(PythonExpression(["'", LaunchConfiguration('gripper_count'), "' != '0'"])),
+    )
+
     # --- USB-CAN (robomas_plugins) ---
     robomas = ComposableNodeContainer(
         package='rclcpp_components',
@@ -404,6 +423,7 @@ def generate_launch_description():
         chassis,
         wheels,
         grippers,
+        task_commander,
         robomas,
         robot_sim,
         rviz_node,
