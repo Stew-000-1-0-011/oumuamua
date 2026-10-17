@@ -83,6 +83,8 @@ namespace {
 			this->range_min_ = this->declare_parameter<double>("range_min", 0.05);
 			this->range_max_ = this->declare_parameter<double>("range_max", 10.0);
 			this->layer_offset_ = this->declare_parameter<double>("layer_offset", 0.05);
+			// スキャンの点の間引き (1 なら全部使う)。計算量はほぼ点の数に比例する
+			this->point_stride_ = static_cast<std::size_t>(std::max<std::int64_t>(1, this->declare_parameter<std::int64_t>("point_stride", 1)));
 			this->num_neighbors_ = static_cast<int>(this->declare_parameter<std::int64_t>("num_neighbors", 10));
 			this->num_threads_ = static_cast<int>(this->declare_parameter<std::int64_t>("num_threads", 2));
 			// 対応点の距離の上限 [m]。粗い段 -> 細かい段の 2 段で合わせる
@@ -182,7 +184,7 @@ namespace {
 			// --- スキャン -> 機体座標系の平面の点 ---
 			std::vector<Eigen::Vector4d> points;
 			points.reserve(scan.ranges.size() * 3);
-			for (std::size_t i = 0; i < scan.ranges.size(); ++i) {
+			for (std::size_t i = 0; i < scan.ranges.size(); i += this->point_stride_) {
 				const double r = scan.ranges[i];
 				if (!std::isfinite(r) || r < std::max<double>(this->range_min_, scan.range_min)
 					|| r > std::min<double>(this->range_max_, scan.range_max)) {
@@ -287,6 +289,7 @@ namespace {
 		double range_min_{};
 		double range_max_{};
 		double layer_offset_{};
+		std::size_t point_stride_{1};
 		int num_neighbors_{};
 		int num_threads_{};
 		double coarse_distance_{};

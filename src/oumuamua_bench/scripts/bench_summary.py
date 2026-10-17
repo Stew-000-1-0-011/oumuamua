@@ -29,6 +29,9 @@ COLUMNS = [
     ('追従 CPU [%]', lambda r: r['cpu']['groups'].get('navigation', {}).get('cpu_percent'), 1, 1),
     ('自己位置 1 スキャンあたり [ms]', lambda r: 1000 * r['cpu']['groups'].get('localization', {}).get('cpu_s', math.nan)
         / max(r['metrics']['scan_count'], 1), 1, 2),
+    ('自己位置の更新 [Hz]', lambda r: r['metrics']['update_count'] / r['cpu']['wall_s'] if r['cpu']['wall_s'] else math.nan, 1, 1),
+    ('自己位置 1 更新あたり [ms]', lambda r: 1000 * r['cpu']['groups'].get('localization', {}).get('cpu_s', math.nan)
+        / r['metrics']['update_count'], 1, 2),
     ('自己位置 メモリ [MB]', lambda r: r['cpu']['groups'].get('localization', {}).get('rss_mb'), 1, 0),
 ]
 

@@ -1,0 +1,5 @@
+# launch 引数 overrides の既定 (何も上書きしない)。
+# overrides には「ノード名: ros__parameters: ...」の形のファイルを渡す。自己位置推定のノードのパラメータの最後に読む
+/**:
+  ros__parameters:
+    bench_overrides: false

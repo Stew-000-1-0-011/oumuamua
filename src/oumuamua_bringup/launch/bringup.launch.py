@@ -174,6 +174,7 @@ def generate_launch_description():
                 'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
                 'publish_tf': not_estimator,
             }),
+            LaunchConfiguration('overrides'),
         ],
         output='screen',
         condition=use_sotoba,
@@ -226,6 +227,7 @@ def generate_launch_description():
                             '), float(', LaunchConfiguration('start_yaw'), ')]']),
                         'publish_tf': not_estimator,
                     }),
+                    LaunchConfiguration('overrides'),
                 ],
                 output='screen',
             )]
@@ -251,6 +253,7 @@ def generate_launch_description():
                         'initial_pose': {**start_pose, 'z': 0.0},
                         'tf_broadcast': not_estimator,
                     }),
+                    LaunchConfiguration('overrides'),
                 ],
                 output='screen',
             ),
@@ -293,6 +296,7 @@ def generate_launch_description():
             }))
             remappings.append(('~/pose_measurement',
                                '/amcl_pose' if localization.perform(context) == 'amcl' else '/gicp_localizer/pose'))
+        params.append(LaunchConfiguration('overrides'))
         return [Node(
             package='state_estimator',
             executable='state_estimator_node',
@@ -490,6 +494,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'localization', default_value='sotoba', choices=['sotoba', 'amcl', 'gicp'],
             description='自己位置推定のやり方。sotoba: sotoba_node (ICP)、amcl: nav2_amcl、gicp: gicp_localizer (small_gicp)'),
+        DeclareLaunchArgument(
+            'overrides', default_value=config('oumuamua_bringup', 'overrides_empty.yaml'),
+            description='自己位置推定のノード (sotoba_node・amcl・gicp_localizer・state_estimator) に最後に読ませる'
+                        'パラメータファイル。oumuamua_bench が計算負荷のつまみを振るのに使う'),
         DeclareLaunchArgument(
             'navigation', default_value='tracker', choices=['tracker', 'nav2'],
             description='経路の追従のやり方。tracker: path_follower + tracker_node、nav2: Nav2 (localization:=amcl / gicp と組み合わせる)'),

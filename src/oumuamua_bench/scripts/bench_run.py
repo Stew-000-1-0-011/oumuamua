@@ -32,7 +32,7 @@ import numpy as np
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
-from geometry_msgs.msg import PoseStamped, TwistStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TwistStamped
 from holonomic_tracker.msg import TrackingReference
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
@@ -40,6 +40,11 @@ from rclpy.time import Time
 from sensor_msgs.msg import LaserScan
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
+
+try:
+    from sotoba_ros.msg import BeliefArray
+except ImportError:  # sotoba_ros が無くても動くように
+    BeliefArray = None
 
 LEGS = ['start_to_shelf', 'shelf_to_start']
 
@@ -160,6 +165,8 @@ class Recorder(Node):
         self.ref = []     # (受け取った時刻, x, y, yaw, vx, vy, omega)
         self.cmd = []     # (受け取った時刻, vx, vy, omega)
         self.scan_count = 0
+        # 自己位置推定が推定を出した回数 (更新の回数)。どれか 1 つだけが出しているはず
+        self.update_count = 0
         self.recording = False
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -167,6 +174,10 @@ class Recorder(Node):
         self.create_subscription(TrackingReference, '/tracker_node/reference', self.on_ref, 100)
         self.create_subscription(TwistStamped, '/cmd_vel', self.on_cmd, 100)
         self.create_subscription(LaserScan, '/scan', self.on_scan, qos_profile_sensor_data)
+        for topic in ('/amcl_pose', '/gicp_localizer/pose'):
+            self.create_subscription(PoseWithCovarianceStamped, topic, self.on_update, 100)
+        if BeliefArray is not None:
+            self.create_subscription(BeliefArray, '/sotoba_node/posterior_beliefs', self.on_update, 100)
         self.last_est_stamp = None
         self.create_timer(0.01, self.poll_tf)
 
@@ -191,6 +202,10 @@ class Recorder(Node):
     def on_scan(self, _):
         if self.recording:
             self.scan_count += 1
+
+    def on_update(self, _):
+        if self.recording:
+            self.update_count += 1
 
     def poll_tf(self):
         # 構成によって TF の鎖が違う (field -> base_link 直か、field -> odom -> base_link か) ので、
@@ -377,6 +392,7 @@ def compute_metrics(rec, legs, paths, map_points, footprint):
     else:
         m['cmd_accel_rms'] = float('nan')
     m['scan_count'] = rec.scan_count
+    m['update_count'] = rec.update_count
     return m
 
 
@@ -418,6 +434,13 @@ def run_once(args, variant_name, variant, scenario_name, scenario, seed, paths, 
 
     cmd = ['ros2', 'launch', 'oumuamua_bringup', 'bringup.launch.py', 'sim:=true', f'sim_params:={sim_file}']
     cmd += list(variant.get('launch_args') or [])
+    # 構成ごとのパラメータの上書き (variants の params: {ノード名: {パラメータ: 値}})
+    overrides_file = None
+    if variant.get('params'):
+        with tempfile.NamedTemporaryFile('w', suffix='.yaml', prefix='bench_overrides_', delete=False) as f:
+            yaml.safe_dump({node: {'ros__parameters': nested(p)} for node, p in variant['params'].items()}, f)
+            overrides_file = f.name
+        cmd.append(f'overrides:={overrides_file}')
     log = open(log_dir / f'{tag}.log', 'w')
     launch = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
 
@@ -495,6 +518,8 @@ def run_once(args, variant_name, variant, scenario_name, scenario, seed, paths, 
         log.close()
         kill_leftovers()
         os.unlink(sim_file)
+        if overrides_file:
+            os.unlink(overrides_file)
 
     metrics = compute_metrics(rec, legs, paths, map_points, footprint)
     if args.save_traces:

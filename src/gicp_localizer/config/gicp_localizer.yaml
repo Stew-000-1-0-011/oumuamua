@@ -8,6 +8,7 @@ gicp_localizer:
     transform_tolerance: 0.1      # [s] field -> odom に付ける先の時刻 (AMCL と同じ)
     range_min: 0.05
     range_max: 10.0
+    point_stride: 1               # スキャンの点の間引き (1 なら全部)
     layer_offset: 0.05            # [m] 平面の点を z = ±これにも複製する (GICP の共分散を鉛直な面にする)
     num_neighbors: 10             # 共分散を求める近傍の数
     num_threads: 2
