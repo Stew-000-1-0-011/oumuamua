@@ -28,3 +28,7 @@
 	path = src/emcl2_ros2
 	url = https://github.com/Stew-000-1-0-011/emcl2_ros2.git
 	branch = main
+[submodule "src/navigation2"]
+	path = src/navigation2
+	url = https://github.com/Stew-000-1-0-011/navigation2.git
+	branch = oumuamua
