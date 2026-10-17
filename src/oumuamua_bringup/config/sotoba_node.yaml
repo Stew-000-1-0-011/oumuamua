@@ -24,7 +24,11 @@
     # --- 外れ値対策 (LiDAR が振動で傾き、壁を越えた点や床の点が混ざる場合) ---
     # oumuamua_sim の tilt.amplitude で比較して決めた値。README の「LiDAR の傾きへの対策」参照
     huber_k: 2.0                 # 正規化残差 2 (sigma_range 0.03 なら 6cm) を超える点の重みを下げる
-    accept_distance_begin: 0.3   # 対応付けのゲートを初回から狭める (事前が良いので広く探さなくてよい)
+    # 対応付けのゲートを段階的に狭める (accept_distance_begin) と、収束しても打ち切れず毎スキャン 20 回反復する。
+    # 事前が良いので最初から accept_distance で探し、収束したら打ち切る。シミュレーションでは CPU が約 1/3 になり、
+    # 傾き・初期ずれ・歪みでの精度は変わらなかった (oumuamua_bench)
+    accept_distance_begin: 0.0
+    convergence_delta: 1.0e-4
     ray_gate: 0.1                # 事前の姿勢での予測距離と 0.1m 以上違う点を捨てる
 
     # 初期姿勢 (フィールド座標系)。**LiDAR の姿勢**で、機体中心 (base_link) ではない。

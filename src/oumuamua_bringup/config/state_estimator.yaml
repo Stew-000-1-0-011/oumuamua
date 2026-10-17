@@ -6,6 +6,9 @@ state_estimator:
     field_frame: field
     base_frame: base_link
     lidar_frame: laser
+    # ~/odom・TF・sotoba への事前を出す周期。100 Hz (既定) の負荷のほとんどはこの送信で、
+    # tracker_node は 50 Hz で回るので 50 Hz で足りる (精度は変わらなかった)
+    publish_rate: 50.0
 
     filter:
       # sotoba の推定が予測から 5 sigma 以上外れたら捨てる (傾いた LiDAR での誤対応対策)。
