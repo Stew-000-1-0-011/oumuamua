@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>oumuamua_bench</name>
+  <version>0.0.0</version>
+  <description>
+    oumuamua の構成どうしを閉ループで比べる。sim:=true の bringup を構成ごと・状況ごと・乱数の種ごとに立てて
+    本番の経路を往復させ、追従・自己位置・計算負荷を測って表にする。
+  </description>
+  <maintainer email="shnsk0204@gmail.com">Stew</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>tf2_msgs</exec_depend>
+  <exec_depend>holonomic_tracker</exec_depend>
+  <exec_depend>oumuamua_bringup</exec_depend>
+  <exec_depend>oumuamua_sim</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

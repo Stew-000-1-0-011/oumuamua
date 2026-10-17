@@ -1,0 +1,30 @@
+# 走らせる状況。名前 -> robot_sim に追加で読ませるパラメータ (robot_sim.yaml の後に読む)。
+# どの状況も、start_to_shelf -> shelf_to_start と本番の経路を往復する。
+nominal:
+  description: 外乱なし (main の robot_sim.yaml のまま)
+  robot_sim: {}
+offset:
+  description: 置いた位置が初期シードから 0.1 m・0.08 rad ずれている
+  robot_sim:
+    start_offset_x: 0.08
+    start_offset_y: -0.06
+    start_offset_yaw: 0.08
+tilt:
+  description: 振動で LiDAR が傾く (0.03 rad + 速さ 1 m/s あたり 0.1 rad の揺れ)
+  robot_sim:
+    tilt.amplitude: 0.03
+    tilt.amplitude_per_speed: 0.1
+    tilt.random_stddev: 0.005
+obstacle:
+  description: フィールドの中に、モデルに無いロボット大の箱が 3 つ (経路には掛からない)
+  robot_sim:
+    environment.obstacles: [1.3, 0.45, 0.2, -2.3, -0.5, 0.2, 1.5, -1.0, 0.25]
+distort:
+  description: 1 スキャンを 25 ms かけて撮る (40 Hz の回転式 LiDAR の歪み)
+  robot_sim:
+    scan_duration: 0.025
+slip:
+  description: 車輪が 5 % 滑る (オドメトリが実際より 5 % 大きい)
+  robot_sim:
+    plant.velocity_scale_linear: 0.95
+    plant.velocity_scale_angular: 0.95

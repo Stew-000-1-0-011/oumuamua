@@ -11,9 +11,11 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 | `src/mini_shirasu_ros` | mini-shirasu (ブラシ付き DC モータドライバ) と CAN で話す |
 | `src/robomas_plugins` | USB-CAN ブリッジ (crs-kouhou/robomas_plugins のフォーク)。`robomas_can_tx` / `robomas_can_rx` だけを使う |
 | `src/oumuamua_bringup` | 上をまとめて起動する launch と、この機体のパラメータ |
-| `src/oumuamua_sim` | `/cmd_vel` から先のシミュレータ (平面運動と 2D LiDAR) |
+| `src/oumuamua_sim` | `/cmd_vel` から先のシミュレータ (平面運動と 2D LiDAR)。フィールドの地図を作る `make_field_map` 付き |
 | `src/state_estimator` | 自己位置と機体速度の推定。sotoba_node と対になって事前分布を渡す |
 | `src/path_follower` | 起動前に作った経路ファイルを読み、速度計画を付けて tracker_node に目標を出す。経路ファイルを作るスクリプト付き |
+| `src/body_odometry` | 機体速度を積分して `odom -> base_link` とオドメトリを出す (AMCL や Nav2 と組み合わせる用) |
+| `src/oumuamua_bench` | 構成どうしをシミュレーションの閉ループで比べる (追従・自己位置・計算負荷) |
 
 ## つながり
 
@@ -125,6 +127,8 @@ robot_sim がやること:
 - `/robot_sim/reset` (`std_srvs/Trigger`) で初期姿勢に戻す
 - `tilt.*` で機体の傾き (取付の傾き + 揺れ + 雑音。揺れの振幅は速さに比例させることもできる) を、
   `environment.*` でフィールドの外 (床・部屋の壁・人や机の代わりの箱) を模擬する。傾いた光線は壁を越えて外の物や床に当たる
+- `environment.obstacles` でフィールドの中にモデルに無い箱 (相手ロボットなど) を置ける。`seed` で雑音の乱数の種を変える。
+  launch 引数 `sim_params` で、robot_sim に追加のパラメータファイルを読ませられる (oumuamua_bench が使う)
 
 フィールドの寸法と初期姿勢は sotoba_node と同じパラメータファイルを読むので食い違わない。
 パラメータは `src/oumuamua_sim/config/robot_sim.yaml`。

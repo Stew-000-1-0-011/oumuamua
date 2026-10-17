@@ -11,3 +11,6 @@ run*/
 
 # Python のキャッシュ
 __pycache__/
+
+# oumuamua_bench の結果
+bench/

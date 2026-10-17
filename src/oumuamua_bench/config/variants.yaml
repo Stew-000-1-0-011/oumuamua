@@ -1,0 +1,8 @@
+# 比べる構成。名前 -> bringup.launch.py に渡す引数 (sim:=true と sim_params は bench_run.py が足す)。
+# 自己位置推定や経路追従を置き換えるブランチは、ここに自分の構成を足す。
+sotoba_est:
+  description: sotoba_node + state_estimator (main の既定)
+  launch_args: [estimator:=true]
+sotoba_pp:
+  description: sotoba_node + 持続予測 (persistence_predictor)。state_estimator なし
+  launch_args: [estimator:=false]
