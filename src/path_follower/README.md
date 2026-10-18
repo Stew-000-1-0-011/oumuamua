@@ -29,7 +29,8 @@ ros2 run path_follower make_path.py route.yaml path_back.csv --reverse   # 同�
 - `corners`: 折れ線の頂点 `[x, y, 半径]`。角は半径の円弧で丸める
 - `yaw`: 始点からの道のり [m] と、そこでの機体の向き [rad]。全方向移動なので、向きは進む向きと無関係に決められる。
   間は滑らかにつなぐ。その場での旋回 (位置を変えずに向きだけ変える) は書けない
-- `follow_heading`: 道のり `from` から先は、機体の向きを進む向きに合わせる (それまでは `yaw` のとおり)
+- `follow_heading`: 道のり `from` から先は、機体の向きを進む向きに合わせる (それまでは `yaw` のとおり)。
+  `to` を書くと、そこで `yaw` のとおりに戻す (狭い区間だけ向きを合わせたいとき)
 - `obstacles` / `bounds` と、機体の外形 (`footprint` の多角形か `robot_radius` の円): 書いておくと、
   外形から障害物までの最小の間隔を出す (機体の向きも考える)。`min_clearance` より近ければ失敗して、経路ファイルを作らない
 - `lidar`: LiDAR の取付位置。図にその軌跡を描く
