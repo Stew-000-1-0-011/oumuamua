@@ -81,6 +81,7 @@ def generate_launch_description():
     not_estimator = PythonExpression(["'", estimator, "' != 'true'"])
     # 実機でだけ立てるもの
     real = UnlessCondition(sim)
+    odometry_only = LaunchConfiguration('odometry_only')
     lidar_real = IfCondition(PythonExpression(["'", lidar, "' == 'true' and '", sim, "' != 'true'"]))
 
     # --- LiDAR (urg_node2 はライフサイクルノード。起動したら configure -> activate まで進める) ---
@@ -189,6 +190,8 @@ def generate_launch_description():
             velocity_topic = '/robot_sim/body_velocity' if sim.perform(context) == 'true' else '/chassis_node/body_velocity'
         else:
             raise RuntimeError(f"velocity_source must be 'wheels' or 'cmd_vel': {source}")
+        if odometry_only.perform(context) == 'true':
+            params.append(NodeParams('state_estimator', {'dead_reckoning': True}))
         return [Node(
             package='state_estimator',
             executable='state_estimator_node',
@@ -341,12 +344,15 @@ def generate_launch_description():
             'velocity_source', default_value='wheels', choices=['wheels', 'cmd_vel'],
             description='state_estimator の速度入力。wheels: 車輪オドメトリ、cmd_vel: 指令値'),
         DeclareLaunchArgument(
-            'cmd_tau', default_value='0.1',
-            description='velocity_source:=cmd_vel のときの、指令への追従の時定数 [s]'),
+            'cmd_tau', default_value='0.18',
+            description='velocity_source:=cmd_vel のときの、指令への追従の時定数 [s]。実機の記録 (wkp 1.6) で 0.18 s'),
         DeclareLaunchArgument(
             'path_dir',
             default_value=PathJoinSubstitution([FindPackageShare('oumuamua_bringup'), 'config', 'paths']),
             description='path_follower の経路ファイル (make_path.py で作った CSV) を置いた場所。どれを読むかは path_follower.yaml の paths'),
+        DeclareLaunchArgument(
+            'odometry_only', default_value='false',
+            description='初期位置だけ LiDAR で合わせ、動き出したら車輪オドメトリだけで自己位置を出す (state_estimator の dead_reckoning)'),
         DeclareLaunchArgument(
             'sim', default_value='false',
             description='/cmd_vel から先を oumuamua_sim で模擬する (LiDAR・足回り・ドライバ・USB-CAN は立てない)'),
