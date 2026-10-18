@@ -12,7 +12,11 @@
 
 namespace path_follower {
 	namespace {
-		/// 連続する3点を通る円の曲率 (向きは見ない)
+		/// 曲率と向きの変化を測るときに、前後に離す道のり [m]。
+		/// 隣どうしの点で測ると、点が細かいほど座標の丸め誤差で曲率が大きく見えて遅くなる
+		constexpr double measure_span = 0.03;
+
+		/// 3点を通る円の曲率 (向きは見ない)
 		auto curvature(const PathPoint& a, const PathPoint& b, const PathPoint& c) -> double {
 			const double ab = std::hypot(b.x - a.x, b.y - a.y);
 			const double bc = std::hypot(c.x - b.x, c.y - b.y);
@@ -39,17 +43,25 @@ namespace path_follower {
 			this->s_[i] = this->s_[i - 1] + ds;
 		}
 
-		// 各点で許される速さ: 最高速、横加速度 (曲率)、角速度 (道のりあたりの yaw の変化)
+		// 各点で許される速さ: 最高速、横加速度 (曲率)、角速度 (道のりあたりの yaw の変化)。
+		// 曲率と向きの変化は、前後に measure_span 以上離れた点で測る (端では届く範囲で)
 		std::vector<double> cap(n, limits.max_speed);
+		std::size_t a = 0;
+		std::size_t b = 0;
 		for (std::size_t i = 0; i < n; ++i) {
-			if (i > 0 && i + 1 < n) {
-				const double k = curvature(this->points_[i - 1], this->points_[i], this->points_[i + 1]);
+			while (a + 1 < i && this->s_[i] - this->s_[a + 1] >= measure_span) { ++a; }
+			if (b < i) { b = i; }
+			while (b + 1 < n && this->s_[b] - this->s_[i] < measure_span) { ++b; }
+			if (a < i && i < b) {
+				const double k = curvature(this->points_[a], this->points_[i], this->points_[b]);
 				if (k > 0.0) { cap[i] = std::min(cap[i], std::sqrt(limits.max_lateral_accel / k)); }
 			}
-			const std::size_t a = i > 0 ? i - 1 : i;
-			const std::size_t b = i + 1 < n ? i + 1 : i;
-			const double yaw_per_metre = std::abs(this->points_[b].yaw - this->points_[a].yaw) / (this->s_[b] - this->s_[a]);
-			if (yaw_per_metre > 0.0) { cap[i] = std::min(cap[i], limits.max_yaw_rate / yaw_per_metre); }
+			const std::size_t lo = a < i ? a : i;
+			const std::size_t hi = b > i ? b : i;
+			if (hi > lo) {
+				const double yaw_per_metre = std::abs(this->points_[hi].yaw - this->points_[lo].yaw) / (this->s_[hi] - this->s_[lo]);
+				if (yaw_per_metre > 0.0) { cap[i] = std::min(cap[i], limits.max_yaw_rate / yaw_per_metre); }
+			}
 		}
 
 		// 両端で止まる。前から加速、後ろから減速の上限をかける
