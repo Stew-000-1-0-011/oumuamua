@@ -25,20 +25,25 @@
       temperature_limit: 50
       enable_on_start: true
       config_repeat: 3
-      target_scale: 1.0
+      # ボード (robomas_center の MotorCtrl.cpp) の位置目標は「ロータの角度 [deg]」で、位置制御を有効にした時点が 0。
+      # 昇降は M2006 (ギヤ 36:1) の出力軸に半径 15 mm のピニオン: 出力軸 1 回転で 2π × 0.015 = 0.0942 m 上がる。
+      # 高さ 1 m = 1 / 0.0942 回転 × 36 × 360 deg = 137509.9 deg (上がる向きが逆なら符号を反転)
+      target_scale: -137509.9   # 実機で確かめた向き (正で下がった)
       target_offset: 0.0
       gear_ratio: 36.0
-      meters_per_output_revolution: 0.0
+      meters_per_output_revolution: 0.0942478   # 2π × 0.015 m
       feedback_timeout: 0.2
       min_height: 0.0
-      max_height: 0.3
-      max_speed: 0.2
+      # 今は暫定の配線で 200 mm までしか上がらないので、1 cm 余裕を残す
+      max_height: 0.19
+      # 初めて動かすので遅めに (ロータで約 1100 rpm)
+      max_speed: 0.05
       tolerance: 0.005
       settle_time: 0.2
       timeout_margin: 2.0
       # ~/set_lift_position の番号 -> 高さ [m] (起動時の位置が 0)。機構ごとに変えるなら gripper<i> に書く
       #           0: 下   1: 中段   2: 上段
-      positions: [0.0,   0.12,     0.25]
+      positions: [0.0,   0.09,     0.18]
       position_names: [bottom, middle, top]
     suction:
       current: 0.0
