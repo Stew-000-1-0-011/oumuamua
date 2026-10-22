@@ -5,6 +5,7 @@
 [submodule "src/urg_node2"]
 	path = src/urg_node2
 	url = https://github.com/Stew-000-1-0-011/urg_node2.git
+	branch = lyrical
 [submodule "src/holonomic_tracker"]
 	path = src/holonomic_tracker
 	url = https://github.com/Stew-000-1-0-011/holonomic_tracker.git
