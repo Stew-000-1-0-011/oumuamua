@@ -1,6 +1,6 @@
 # oumuamua
 
-ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以外のパッケージは `src/` 以下の git submodule。
+ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` と `gripper` 以外のパッケージは `src/` 以下の git submodule。
 
 | パッケージ | 内容 |
 | --- | --- |
@@ -13,6 +13,8 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 | `src/oumuamua_bringup` | 上をまとめて起動する launch と、この機体のパラメータ |
 | `src/oumuamua_sim` | `/cmd_vel` から先のシミュレータ (平面運動と 2D LiDAR)。フィールドの地図を作る `make_field_map` 付き |
 | `src/state_estimator` | 自己位置と機体速度の推定。sotoba_node と対になって事前分布を渡す |
+| `src/gripper` | 把持機構 (ロボマスによる昇降 + mini-shirasu の電流制御による吸引) 1 つぶんを動かすノード。機構の数だけ立てる |
+| `src/task_commander` | 機体に作業 (ブロックの回収、スラロームの往復、棚への配置、各地点への移動) を 1 つずつ指示する |
 | `src/path_follower` | 起動前に作った経路ファイルを読み、速度計画を付けて tracker_node に目標を出す。経路ファイルを作るスクリプト付き |
 | `src/body_odometry` | 機体速度を積分して `odom -> base_link` とオドメトリを出す (AMCL や Nav2 と組み合わせる用) |
 | `src/gicp_localizer` | 2D スキャンを点群地図に small_gicp で位置合わせする自己位置推定 (sotoba_node と比べる用) |
@@ -28,6 +30,10 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` 以
 - tracker_node は `/state_estimator/odom` を使って `/cmd_vel` (`TwistStamped`) を出す
 - chassis_node -> `/wheel<i>/target_velocity` -> mini_shirasu_node (`wheel0..2`)
   -> `/robomas_can_tx` -> robomas_bridge (USB-CAN) -> mini-shirasu 3 枚 (3 輪オムニ)
+- 把持機構 i (`i = 0, 1`): gripper_node (`gripper<i>`) が `~/set_lift_position` (`config/gripper.yaml` の `lift.positions` の番号) で昇降し、`~/set_suction` で吸引をオン/オフする。
+  昇降は `/robomas_frame`・`/robomas_target<k>` -> robomas_bridge -> ロボマス (ボードの位置制御)、
+  吸引は `/suction<i>/target_current` -> mini_shirasu_node (`suction<i>`、電流制御) -> mini-shirasu。詳しくは `src/gripper/README.md`
+- task_commander が `~/run` (アクション) で作業を受け、path_follower の `~/follow` と gripper<i> を順に動かす。詳しくは `src/task_commander/README.md`
 - 車輪の実測: mini_shirasu_node の `~/joint_state` -> chassis_node が機体速度にして `~/body_velocity`
   -> state_estimator の `~/body_velocity` (車輪オドメトリ)
 
@@ -65,7 +71,8 @@ ros2 service call /path_follower/start/shelf_to_start std_srvs/srv/Trigger   # �
 ros2 service call /path_follower/stop std_srvs/srv/Trigger                   # 目標を止める (tracker_node が機体を止める)
 ```
 
-経路は `src/oumuamua_bringup/config/paths/` にある。`start_to_shelf.route.yaml` が定義で、そこから
+経路は `src/oumuamua_bringup/config/paths/` にある。スラロームの往復 (`slalom_forward.csv`, `slalom_backward.csv`) は
+`slalom.route.yaml` から作り、task_commander が使う。`start_to_shelf.route.yaml` が定義で、そこから
 行き (`start_to_shelf.csv`) と帰り (`shelf_to_start.csv`。同じ経路を逆にたどる) を作ってある。定義を変えたら両方作り直す:
 
 ```bash
@@ -96,6 +103,9 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `chassis_params` | `config/chassis_node.yaml` | chassis_node のパラメータ |
 | `wheel_count` | `3` | mini_shirasu_node (`wheel0..`) の数。`chassis_node.yaml` の車輪数と合わせる |
 | `mini_shirasu_params` | `config/mini_shirasu.yaml` | mini_shirasu_node (`wheel0..`) のパラメータ |
+| `gripper_count` | `2` | 把持機構 (`gripper<i>` と `suction<i>`) の数。`sim:=true` なら `gripper<i>` だけ立てる |
+| `gripper_params` | `config/gripper.yaml` | gripper_node (`gripper0..`) のパラメータ |
+| `suction_params` | `config/suction.yaml` | 吸引の mini_shirasu_node (`suction0..`) のパラメータ |
 | `bridge` | `true` | robomas_bridge (USB-CAN) を起動する |
 | `rviz` | `false` | RViz2 を起動する |
 | `sim` | `false` | `/cmd_vel` から先をシミュレータにする (下の「シミュレーション」) |
@@ -106,7 +116,7 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `map` | `config/maps/field.yaml` | `localization:=amcl` の地図 |
 | `point_map` | `config/maps/field.pcd` | `localization:=gicp` の点群地図 |
 | `velocity_source` | `wheels` | state_estimator の速度入力。`wheels`: 車輪オドメトリ (`sim:=true` なら robot_sim の模擬)、`cmd_vel`: 指令値 |
-| `cmd_tau` | `0.1` | `velocity_source:=cmd_vel` のときの、指令への追従の時定数 [s] |
+| `cmd_tau` | `0.18` | `velocity_source:=cmd_vel` のときの、指令への追従の時定数 [s] (実機の記録で 0.18 s) |
 
 次は**例・仮の値のまま**なので、実機に合わせること。
 
@@ -115,6 +125,12 @@ ros2 launch oumuamua_bringup bringup.launch.py
 - `src/oumuamua_bringup/config/mini_shirasu.yaml`: 基板ごとの CAN ID。ファームの ID は
   `minishirasu-firm/src/config.rs` のコンパイル時定数 なので、
   複数枚つなぐなら基板ごとに書き換えて焼き、ここと合わせる。今は基板 i に 目標 0x110+i / 状態 0x120+i / コマンド 0x130+i / 応答 0x140+i を割り当てている
+
+- `src/oumuamua_bringup/config/task_commander.yaml`: 把持機構の取付位置 (`grippers.offsets`、今は機体の後ろ 0.45 m・左右 0.12 m と仮定) と、
+  回収・配置のときの機体の向き
+- `src/oumuamua_bringup/config/gripper.yaml`, `suction.yaml`: 把持機構。ロボマスの ID と種類、昇降の高さ (`lift.positions`)、ボードの位置目標の単位
+  (`lift.target_scale`)、行程、吸引の電流 (`suction.current` は 0 A にしてあるので、このままでは吸わない)、
+  吸引の基板の CAN ID (基板 3, 4 = 0x113.., 0x114.. を割り当てている)
 
 モータドライバの設定 (`settings.*`) は mini-shirasu2 の `bench.rs` で実機が動いた値で、
 速度・位置は駆動軸 (ホイール) 基準。そのため chassis_node の `gear_ratio` は ±1、

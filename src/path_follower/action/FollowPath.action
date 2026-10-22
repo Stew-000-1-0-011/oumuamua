@@ -1,0 +1,16 @@
+# 経路を走って、終点で止まるまでを 1 つのゴールにする。
+# - route が空でなければ、paths にある名前付きの経路を走る (始点の確認は ~/start と同じ)
+# - route が空なら、今の自己位置から (x[i], y[i], yaw[i]) を順に直線でつないだ経路を走る。
+#   向きは各辺の上で一定の割合で回す (その場での旋回はできない)。頂点では速さが落ちる
+# 走っている途中に新しいゴールが来たら、前のゴールは打ち切り (aborted)、今の位置から新しい経路を始める
+string route
+float64[] x            # [m] フィールド座標系
+float64[] y
+float64[] yaw          # [rad]
+float64 max_speed      # [m/s] 0 なら limits.max_speed。それより速くはしない
+---
+bool success           # 終点で止まった (自己位置が goal_tolerance 以内に goal_settle_time 留まった)
+string message
+---
+float64 remaining      # [m] 目標が終点まで残している道のり
+float64 error          # [m] 自己位置と目標の距離
