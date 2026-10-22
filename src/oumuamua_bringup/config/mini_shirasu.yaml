@@ -38,7 +38,7 @@
       wkp: 1.6                # [A/(rad/s)]
       wki: 5.0                # [A/(rad/s s)]
       wb: 0.8
-      wmax: 40.0              # [rad/s] 車輪半径 0.029 m で約 1.16 m/s。chassis_node.yaml の max_wheel_speed と揃える
+      wmax: 120.0             # [rad/s] 車輪半径 0.029 m で 3.5 m/s。chassis_node.yaml の max_wheel_speed と揃える (wmax / wbase < 8)
       pkp: 1.5                # [1/s]
       pmax: 100.0             # [回転]
       accel_to_current: 0.01  # [A/(rad/s^2)]

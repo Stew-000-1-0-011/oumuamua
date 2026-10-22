@@ -29,7 +29,8 @@ ros2 run path_follower make_path.py route.yaml path_back.csv --reverse   # 同�
 - `corners`: 折れ線の頂点 `[x, y, 半径]`。角は半径の円弧で丸める
 - `yaw`: 始点からの道のり [m] と、そこでの機体の向き [rad]。全方向移動なので、向きは進む向きと無関係に決められる。
   間は滑らかにつなぐ。その場での旋回 (位置を変えずに向きだけ変える) は書けない
-- `follow_heading`: 道のり `from` から先は、機体の向きを進む向きに合わせる (それまでは `yaw` のとおり)
+- `follow_heading`: 道のり `from` から先は、機体の向きを進む向きに合わせる (それまでは `yaw` のとおり)。
+  `to` を書くと、そこで `yaw` のとおりに戻す (狭い区間だけ向きを合わせたいとき)
 - `obstacles` / `bounds` と、機体の外形 (`footprint` の多角形か `robot_radius` の円): 書いておくと、
   外形から障害物までの最小の間隔を出す (機体の向きも考える)。`min_clearance` より近ければ失敗して、経路ファイルを作らない
 - `lidar`: LiDAR の取付位置。図にその軌跡を描く
@@ -57,12 +58,28 @@ ros2 service call /path_follower/stop std_srvs/srv/Trigger     # 目標を出す
 | sub | `odom_topic` (既定 `/state_estimator/odom`) | `nav_msgs/msg/Odometry` (自己位置) |
 | srv | `~/start/<名前>`, `~/start` | `std_srvs/srv/Trigger` (その経路の始点から走り出す。`~/start` は最初の経路) |
 | srv | `~/stop` | `std_srvs/srv/Trigger` |
+| action | `~/follow` | `path_follower/action/FollowPath` (下の「アクション」) |
+
+### アクション `~/follow`
+
+経路を走り、終点で止まるまでを 1 つのゴールにする。task_commander が使う。
+
+- `route` に `paths` の名前を書くと、その経路を走る (始点の確認は `~/start` と同じ)
+- `route` が空なら、今の自己位置から `(x[i], y[i], yaw[i])` を順に直線でつないだ経路を作って走る。
+  向きは各辺の上で一定の割合で回す。頂点では曲率の上限で遅くなる。その場での旋回はできない (位置が同じで向きだけ違う頂点は失敗)
+- `max_speed` (0 でなければ) で `limits.max_speed` をさらに下げる
+- 成功: 目標が終点に着いた後、自己位置が `goal_tolerance` [m]・`goal_yaw_tolerance` [rad] 以内に `goal_settle_time` [s] 留まった。
+  `goal_timeout` [s] 経っても留まらなければ失敗
+- 走っている途中に新しいゴール・`~/start`・`~/stop` が来たら、前のゴールは打ち切る。取り消すと目標を出すのをやめる (追従ノードが止める)
 
 ### 速度計画
 
 経路の各点で許される速さを、最高速 (`limits.max_speed`)、横加速度 (`limits.max_lateral_accel`、曲率から)、
 角速度 (`limits.max_yaw_rate`、道のりあたりの向きの変化から) の一番厳しいもので決め、
 両端で止まるように前後から加減速 (`limits.max_accel`) の上限をかける。曲がり角と、向きを変える区間で自動的に遅くなる。
+
+曲率と向きの変化は、各点の前後 3 cm 以上離れた点から測る。隣どうしの点で測ると、点を細かく打つほど
+座標の丸め誤差で曲率が大きく見えて、計画が遅くなる (1 mm 刻みで 2 倍以上)。点の間隔は 1 cm 程度で足りる。
 
 ### 安全のための動き
 

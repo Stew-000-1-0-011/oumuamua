@@ -3,14 +3,26 @@
 path_follower:
   ros__parameters:
     # config/paths の下の経路。~/start/<名前> で走り出す (~/start は最初の経路)
-    paths: [start_to_shelf, shelf_to_start]
+    #   start_to_shelf / shelf_to_start: 壁の隙間の中央を通る。機体は進む向きを向く (帰りは後ろ向き)
+    #   fast_start_to_shelf / fast_shelf_to_start: 速さ優先のジグザグ。機体はほぼ +x 向き (狭い区間だけ進む向き)。壁に 6 cm まで寄る
+    #   slalom_forward / slalom_backward: task_commander がスラロームの往復に使う (~/follow で名前を指定)
+    paths: [start_to_shelf, shelf_to_start, fast_start_to_shelf, fast_shelf_to_start, slalom_forward, slalom_backward]
 
-    # 実機で走らせて決めた値 (2026-10-12)。壁には当たらずに走れている。
-    # 所要時間はほぼ曲がり角の速さ (max_lateral_accel と max_yaw_rate の厳しいほう) で決まる。
-    # 直線が短いので、max_speed は上げても長い直線 1 か所でしか効かない。
+    # 速度計画の上限。下の層ほど緩くしてある (計画 < 追従 < 足回り)。ここが機体の出せる範囲を超えると、
+    # 目標が先に行ってしまい、追いつくのを待って止まったり動いたりするので、かえって遅くなる。
+    #   計画 (ここ)         2.0 m/s, 2.5 m/s^2, 2.5 rad/s
+    #   追従 (tracker_node) 2.5 m/s, 4.0 m/s^2, 4.0 rad/s   ずれを戻すぶんの余裕
+    #   足回り (車輪)       120 rad/s = 3.5 m/s            chassis_node.yaml の max_wheel_speed = mini_shirasu.yaml の wmax
+    # 加速は、実機の記録 (2026-10-12 run3 / run4) で出ていた最大 (2〜2.5 m/s^2。電流の上限 imax 8 A と滑り) に合わせてある。所要時間はほぼ曲がり角の速さ (max_lateral_accel と max_yaw_rate の厳しいほう) で決まり、
+    # 直線が短いので max_speed は長い直線でしか効かない。
     # 足回りが指令に約 0.18 s 遅れて付いてくるぶん、速いほど曲がり角を内側へ切る。上げるときは走行を記録して壁との間隔を見ること
     limits:
       max_speed: 2.0           # [m/s]
-      max_accel: 1.0           # [m/s^2]
+      max_accel: 2.5           # [m/s^2]
       max_lateral_accel: 1.5   # [m/s^2] 半径 0.30 m の角を 0.67 m/s で回る
-      max_yaw_rate: 2.5        # [rad/s]
+      max_yaw_rate: 2.5        # [rad/s] 半径 0.30 m の角で 0.75 m/s (機体が進む向きを向く経路のとき)
+
+    # 機体が目標からこれより遅れたら、追いつくまで目標を進めない [m]。
+    # 足回りが指令に約 0.18 s 遅れるので、普通に走っていても「速さ x 0.18 s」だけ遅れる (1.4 m/s で 0.25 m)。
+    # これより小さいと、速い所で毎回待ちが入って止まったり動いたりする
+    max_tracking_error: 0.3

@@ -1,0 +1,6 @@
+# 昇降を lift.positions の index 番目の高さへ動かす。動き出したらすぐ返る。
+# 着いたかは ~/state の lift_arrived で見る。動いている途中に送れば、そちらへ向かい直す
+int32 index
+---
+bool success       # index が範囲外か、昇降が無効なら false
+string message

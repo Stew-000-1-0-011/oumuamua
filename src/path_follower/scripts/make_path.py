@@ -19,6 +19,7 @@
     follow_heading:          # 任意。道のり from [m] から先は、機体の向きを進む向きに合わせる
       from: 1.0              # (それまでは yaw のとおり。blend [m] かけて滑らかに移る)
       blend: 0.2
+      to: 2.0                # 任意。ここで yaw のとおりに戻す (無ければ終点まで進む向き)
     robot_radius: 0.28       # 任意。機体の外形を円とみなした半径。障害物との間隔の確認と図に使う
     footprint:               # 任意。機体の外形の多角形 (機体座標系、x 前・y 左)。あれば robot_radius の代わりに使う
       - [0.3, 0.1]
@@ -156,9 +157,10 @@ def main():
             ref = tangent[-1] if tangent else yaws[0]
             tangent.append(raw + 2 * math.pi * round((ref - raw) / (2 * math.pi)))
         s0 = float(follow.get('from', 0.0))
+        s1 = float(follow['to']) if 'to' in follow else float('inf')
         blend = max(float(follow.get('blend', 0.2)), 1e-6)
         for i, s in enumerate(stations):
-            u = min(max((s - s0) / blend, 0.0), 1.0)
+            u = min(max((s - s0) / blend, 0.0), 1.0, max((s1 - s) / blend, 0.0))
             w = u * u * (3 - 2 * u)
             yaws[i] = (1 - w) * yaws[i] + w * tangent[i]
     path = [(x, y, yaw) for (x, y), yaw in zip(xy, yaws)]
