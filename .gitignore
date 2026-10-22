@@ -11,3 +11,6 @@ run*/
 
 # Python のキャッシュ
 __pycache__/
+
+# clangd のインデックス
+.cache/

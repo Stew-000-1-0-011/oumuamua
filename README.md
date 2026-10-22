@@ -90,7 +90,7 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `path_dir` | `config/paths` | path_follower の経路ファイルを置いた場所 (どれを読むかは `path_follower.yaml` の `paths`) |
 | `estimator` | `true` | state_estimator を使う。`false` なら sotoba_ros の持続予測で事前を出す |
 | `velocity_source` | `wheels` | state_estimator の速度入力。`wheels`: 車輪オドメトリ (`sim:=true` なら robot_sim の模擬)、`cmd_vel`: 指令値 |
-| `cmd_tau` | `0.1` | `velocity_source:=cmd_vel` のときの、指令への追従の時定数 [s] |
+| `cmd_tau` | `0.18` | `velocity_source:=cmd_vel` のときの、指令への追従の時定数 [s] (実機の記録で 0.18 s) |
 
 次は**例・仮の値のまま**なので、実機に合わせること。
 

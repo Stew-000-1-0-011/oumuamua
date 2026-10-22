@@ -29,7 +29,8 @@ ros2 run path_follower make_path.py route.yaml path_back.csv --reverse   # 同�
 - `corners`: 折れ線の頂点 `[x, y, 半径]`。角は半径の円弧で丸める
 - `yaw`: 始点からの道のり [m] と、そこでの機体の向き [rad]。全方向移動なので、向きは進む向きと無関係に決められる。
   間は滑らかにつなぐ。その場での旋回 (位置を変えずに向きだけ変える) は書けない
-- `follow_heading`: 道のり `from` から先は、機体の向きを進む向きに合わせる (それまでは `yaw` のとおり)
+- `follow_heading`: 道のり `from` から先は、機体の向きを進む向きに合わせる (それまでは `yaw` のとおり)。
+  `to` を書くと、そこで `yaw` のとおりに戻す (狭い区間だけ向きを合わせたいとき)
 - `obstacles` / `bounds` と、機体の外形 (`footprint` の多角形か `robot_radius` の円): 書いておくと、
   外形から障害物までの最小の間隔を出す (機体の向きも考える)。`min_clearance` より近ければ失敗して、経路ファイルを作らない
 - `lidar`: LiDAR の取付位置。図にその軌跡を描く
@@ -76,6 +77,9 @@ ros2 service call /path_follower/stop std_srvs/srv/Trigger     # 目標を出す
 経路の各点で許される速さを、最高速 (`limits.max_speed`)、横加速度 (`limits.max_lateral_accel`、曲率から)、
 角速度 (`limits.max_yaw_rate`、道のりあたりの向きの変化から) の一番厳しいもので決め、
 両端で止まるように前後から加減速 (`limits.max_accel`) の上限をかける。曲がり角と、向きを変える区間で自動的に遅くなる。
+
+曲率と向きの変化は、各点の前後 3 cm 以上離れた点から測る。隣どうしの点で測ると、点を細かく打つほど
+座標の丸め誤差で曲率が大きく見えて、計画が遅くなる (1 mm 刻みで 2 倍以上)。点の間隔は 1 cm 程度で足りる。
 
 ### 安全のための動き
 

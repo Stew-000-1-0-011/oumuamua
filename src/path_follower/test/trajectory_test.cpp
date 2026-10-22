@@ -94,6 +94,32 @@ namespace {
 		check(in_arc.vx > 0.05 && in_arc.vy > 0.05, "velocity follows the tangent in the arc");
 	}
 
+	void test_dense_points_do_not_slow_down() {
+		// 半径 0.3 m の円弧を 1 mm 刻みで、経路ファイルと同じく 1e-5 m に丸めて並べる。
+		// 隣どうしの 3 点で曲率を測ると、丸めの誤差で曲率が大きく見えて遅くなる
+		std::vector<PathPoint> p{};
+		const auto round5 = [](const double v) { return std::round(v * 1e5) / 1e5; };
+		for (int i = 0; i <= 1000; ++i) { p.push_back({round5(i * 0.001), 0.0, 0.0}); }
+		const double r = 0.3;
+		const int m = static_cast<int>(r * std::numbers::pi / 2 / 0.001);
+		for (int i = 1; i <= m; ++i) {
+			const double a = (std::numbers::pi / 2) * i / m;
+			p.push_back({round5(1.0 + r * std::sin(a)), round5(r - r * std::cos(a)), 0.0});
+		}
+		const Limits limits{.max_speed = 2.0, .max_accel = 2.0, .max_lateral_accel = 1.0};
+		const Trajectory t{p, limits};
+		double fastest_in_arc = 0.0;
+		double fastest_on_line = 0.0;
+		for (double x = 0.0; x <= t.duration(); x += 0.005) {
+			const auto s = t.sample(x);
+			const double v = std::hypot(s.vx, s.vy);
+			if (s.s > 1.1 && s.s < 1.0 + r * std::numbers::pi / 2 - 0.1) { fastest_in_arc = std::max(fastest_in_arc, v); }
+			if (s.s > 0.3 && s.s < 0.6) { fastest_on_line = std::max(fastest_on_line, v); }
+		}
+		check(fastest_in_arc >= std::sqrt(r) * 0.9, "rounding in dense points does not slow the arc down");
+		check(fastest_on_line >= 1.0, "nor the straight before it");
+	}
+
 	void test_yaw_rate_limits_the_speed() {
 		// 1 m 進む間に 90 度回る。角速度 0.5 rad/s なら 0.5 / (pi/2) = 0.318 m/s まで
 		const Trajectory t{line(1.0, std::numbers::pi / 2), Limits{.max_speed = 2.0, .max_accel = 5.0, .max_yaw_rate = 0.5}};
@@ -172,6 +198,7 @@ auto main() -> int {
 	test_triangle_on_a_short_line();
 	test_ends_at_rest_and_stays();
 	test_slows_down_in_a_curve();
+	test_dense_points_do_not_slow_down();
 	test_yaw_rate_limits_the_speed();
 	test_progress_is_monotonic();
 	test_rejects_bad_input();

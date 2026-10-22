@@ -68,6 +68,9 @@ task_commander:
       release_time: 0.5         # [s] 吸引をオフにしてから持ち上げるまで
 
     # --- 昇降の高さ (gripper.yaml の lift.positions の番号) ---
+    # 下の番号は、gripper.yaml にコメントで置いてある 9 個の並び (棚まで届くとき) を前提にしている。
+    # 今の gripper.yaml は暫定の配線で 3 個 (下 0 / 中 0.09 / 上 0.18 m) なので、pick・clear・carry は動くが、
+    # PLACE は「index 3 is out of lift.positions」で失敗する
     lift:
       pick: 0                   # 吸着面がブロックの上面に当たる
       clear: 1                  # 吸着面がブロックの上面より少し上 (回収のために寄るとき)

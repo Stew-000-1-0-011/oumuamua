@@ -32,6 +32,8 @@ chassis_node:
     cmd_timeout: 0.2
     limits:
       # mini-shirasu の wmax と揃える。ドライバに車輪ごとに切り詰められると進む向きが歪むので、
-      # ここで全輪を同じ倍率で縮めておく
-      max_wheel_speed: 40.0
+      # ここで全輪を同じ倍率で縮めておく。120 rad/s * 半径 0.029 m = 3.5 m/s (モータは 24 V で無負荷約 267 rad/s)
+      max_wheel_speed: 120.0
+      # 加速は計画 (path_follower) と追従 (tracker_node) で抑えるので、ここでは掛けない
+      # (掛けると追従の応答が遅れる)
       max_wheel_accel: 0.0
