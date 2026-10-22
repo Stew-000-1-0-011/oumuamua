@@ -93,6 +93,9 @@ namespace {
 			// --- 実行中に変えられる ---
 			this->declare_parameter<double>("input_delay", 0.0);
 			this->declare_parameter<double>("measurement_timeout", 0.5);
+			// true なら、止まっている間だけ sotoba の事後で初期位置を合わせ、機体が動き出したら
+			// 速度の入力 (車輪オドメトリなど) だけで姿勢を進める
+			this->declare_parameter<bool>("dead_reckoning", false);
 			this->declare_parameter<double>("initial_sigma_xy", 0.05);
 			this->declare_parameter<double>("initial_sigma_yaw", 0.05);
 			this->declare_parameter<bool>("subtract_prior", true);
@@ -180,6 +183,7 @@ namespace {
 
 			this->input_delay_ = d("input_delay");
 			this->measurement_timeout_ = d("measurement_timeout");
+			this->dead_reckoning_ = this->get_parameter("dead_reckoning").as_bool();
 			this->initial_sigma_xy_ = d("initial_sigma_xy");
 			this->initial_sigma_yaw_ = d("initial_sigma_yaw");
 			this->subtract_prior_ = this->get_parameter("subtract_prior").as_bool();
@@ -206,6 +210,25 @@ namespace {
 			this->filter_.add_input(
 				stamp.seconds() + this->input_delay_, Vec3{m.twist.linear.x, m.twist.linear.y, m.twist.angular.z}
 			);
+			// dead_reckoning: 位置を合わせ終えてから動き出したら、以後は観測を使わない。
+			// 車輪オドメトリは止まっていてもノイズで揺れるので、ならした速さで判定する (時定数は 5 サンプルほど)
+			constexpr double smoothing = 0.2;
+			this->still_speed_ += smoothing * (std::hypot(m.twist.linear.x, m.twist.linear.y) - this->still_speed_);
+			this->still_turn_ += smoothing * (std::abs(m.twist.angular.z) - this->still_turn_);
+			const bool moving = this->still_speed_ > 0.05 || this->still_turn_ > 0.15;
+			if (this->dead_reckoning_ && this->localized_ && !this->moved_ && moving) {
+				this->moved_ = true;
+				RCLCPP_INFO(this->get_logger(), "dead reckoning: the robot started moving; pose measurements are ignored until it stops");
+			}
+			// 1 s 止まっていたら、また LiDAR で合わせる (止まっている間に車輪オドメトリのノイズが積もらないように)
+			if (moving) {
+				this->still_since_.reset();
+			} else if (!this->still_since_) {
+				this->still_since_ = stamp;
+			} else if (this->dead_reckoning_ && this->moved_ && (stamp - *this->still_since_).seconds() > 1.0) {
+				this->moved_ = false;
+				RCLCPP_INFO(this->get_logger(), "dead reckoning: the robot is standing still; aligning with pose measurements again");
+			}
 		}
 
 		/// sotoba の定義上の初期姿勢。物体同士の位置関係と、初期化の姿勢に使う
@@ -246,6 +269,7 @@ namespace {
 		}
 
 		void on_posterior(const BeliefArray& m) {
+			if (this->dead_reckoning_ && this->moved_) { return; }
 			if (!this->field_index_ || !this->T_base_lidar_ || !this->filter_.initialized()) {
 				return;
 			}
@@ -385,6 +409,7 @@ namespace {
 			this->reset_stamp_ = now;
 			this->sent_.clear();
 			this->localized_ = false;
+			this->moved_ = false;
 			this->last_accepted_.reset();
 			this->failures_ = 0;
 			RCLCPP_INFO(this->get_logger(), "reset (%s) to (%.3f, %.3f, %.3f)", why, pose(0), pose(1), pose(2));
@@ -428,7 +453,9 @@ namespace {
 			// sotoba への事前は、観測が途切れていても出し続ける (不確かさが育つので探し直せる)
 			this->publish_prior(now, pose, pose_cov);
 
-			const bool fresh = this->last_accepted_ && (now - *this->last_accepted_).seconds() <= this->measurement_timeout_;
+			// dead_reckoning: 初期位置を合わせ終えたら、観測が無くても出し続ける
+			const bool fresh = (this->dead_reckoning_ && this->localized_)
+				|| (this->last_accepted_ && (now - *this->last_accepted_).seconds() <= this->measurement_timeout_);
 			if (!fresh) {
 				// 自己位置が取れていないときは出さない (下流の tracker がタイムアウトで止まる)
 				RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "%s",
@@ -514,6 +541,13 @@ namespace {
 		bool publish_tf_{true};
 		double input_delay_{};
 		double measurement_timeout_{};
+		bool dead_reckoning_{false};
+		/// dead_reckoning で、位置を合わせ終えてから動き出したか
+		bool moved_{false};
+		/// 動き出しの判定に使う、ならした速さ [m/s] と角速度の大きさ [rad/s]
+		double still_speed_{0.0};
+		double still_turn_{0.0};
+		std::optional<rclcpp::Time> still_since_{};
 		double initial_sigma_xy_{};
 		double initial_sigma_yaw_{};
 		bool subtract_prior_{true};
