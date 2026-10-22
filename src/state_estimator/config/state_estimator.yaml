@@ -34,6 +34,10 @@ state_estimator:
     measurement_floor_xy: 0.002   # [m] 観測の標準偏差の下限 (過信しないように)
     measurement_floor_yaw: 0.002  # [rad]
     measurement_timeout: 0.5      # [s] 観測がこれより途切れたら ~/odom と TF を止める
+    # true なら、止まっている間だけ sotoba の推定で位置を合わせ、機体が動き出したら (ならした速さが 0.05 m/s か 0.15 rad/s を超えたら)
+    # 速度の入力 (車輪オドメトリ) だけで姿勢を進める (オドメトリだけでどこまで走れるかの確認用)。1 s 止まるとまた合わせる。
+    # 誤差は溜まる一方なので、壁の近くを走らせるときは注意。~/reset か /initialpose で合わせ直せる
+    dead_reckoning: false
     # 連続してこの回数だけ観測が使えなかったら (sotoba の失敗・ゲートでの棄却)、不確かさを足す
     inflate_after_failures: 3
     inflate_sigma_xy: 0.05        # [m]

@@ -6,6 +6,15 @@
 
 tracker_node の目標 (/tracker_node/reference) を出すノードはここには含まない。
 
+把持機構 (昇降 + 吸引) は gripper_count 個 (既定 2) 立てる。機構 i ごとに
+  gripper<i> (gripper_node): ~/move_lift (アクション) で昇降、~/set_suction で吸引のオン/オフ
+  -> /robomas_target<motor> -> robomas_bridge -> ロボマス
+  -> /suction<i>/target_current -> suction<i> (mini_shirasu_node、電流制御) -> mini-shirasu
+sim:=true なら gripper<i> だけを立てる (昇降は指令をそのまま高さとみなす)。
+
+task_commander は ~/run (task_commander/action/RunTask) で作業 (ブロックの回収、スラロームの往復、
+棚への配置、各地点への移動) を 1 つずつ受け、path_follower の ~/follow と gripper<i> を動かす。
+
 estimator:=true (既定) なら state_estimator が自己位置と速度を推定し、sotoba_node には事前分布を、
 tracker_node には推定 (~/odom) を渡す。速度の入力は velocity_source で選ぶ:
   wheels  (既定): 車輪オドメトリ (chassis_node の ~/body_velocity、sim:=true なら robot_sim の ~/body_velocity)
@@ -106,6 +115,7 @@ def generate_launch_description():
     not_estimator = PythonExpression(["'", estimator, "' != 'true'"])
     # 実機でだけ立てるもの
     real = UnlessCondition(sim)
+    odometry_only = LaunchConfiguration('odometry_only')
     lidar_real = IfCondition(PythonExpression(["'", lidar, "' == 'true' and '", sim, "' != 'true'"]))
 
     # --- LiDAR (urg_node2 はライフサイクルノード。起動したら configure -> activate まで進める) ---
@@ -336,6 +346,8 @@ def generate_launch_description():
             }))
             remappings.append(('~/pose_measurement',
                                '/amcl_pose' if localization.perform(context) == 'amcl' else '/gicp_localizer/pose'))
+        if odometry_only.perform(context) == 'true':
+            params.append(NodeParams('state_estimator', {'dead_reckoning': True}))
         params.append(LaunchConfiguration('overrides'))
         return [Node(
             package='state_estimator',
@@ -451,6 +463,49 @@ def generate_launch_description():
         ]
     wheels = OpaqueFunction(function=make_wheels)
 
+    # --- 把持機構 (gripper<i>: 昇降と吸引のオン/オフ、suction<i>: 吸引のモータの mini-shirasu) ---
+    def make_grippers(context):
+        count = int(LaunchConfiguration('gripper_count').perform(context))
+        nodes = [
+            Node(
+                package='gripper',
+                executable='gripper_node',
+                name=f'gripper{i}',
+                parameters=[LaunchConfiguration('gripper_params')],
+                output='screen',
+            )
+            for i in range(count)
+        ]
+        if sim.perform(context) != 'true':
+            nodes += [
+                Node(
+                    package='mini_shirasu_ros',
+                    executable='mini_shirasu_node',
+                    name=f'suction{i}',
+                    parameters=[LaunchConfiguration('suction_params')],
+                    output='screen',
+                )
+                for i in range(count)
+            ]
+        return nodes
+    grippers = OpaqueFunction(function=make_grippers)
+
+    # --- 作業の指示 (task_commander: ~/run で作業を 1 つずつ受け、path_follower と gripper<i> を動かす) ---
+    task_commander = Node(
+        package='task_commander',
+        executable='task_commander_node',
+        name='task_commander',
+        parameters=[
+            config('oumuamua_bringup', 'task_commander.yaml'),
+            NodeParams('task_commander', {
+                'odom_topic': PythonExpression(
+                    ["'/state_estimator/odom' if '", estimator, "' == 'true' else '/tracker_node/odom'"]),
+            }),
+        ],
+        output='screen',
+        condition=IfCondition(PythonExpression(["'", LaunchConfiguration('gripper_count'), "' != '0'"])),
+    )
+
     # --- USB-CAN (robomas_plugins) ---
     robomas = ComposableNodeContainer(
         package='rclcpp_components',
@@ -526,6 +581,15 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'mini_shirasu_params', default_value=config('oumuamua_bringup', 'mini_shirasu.yaml'),
             description='mini_shirasu_node (wheel0..) のパラメータファイル'),
+        DeclareLaunchArgument(
+            'gripper_count', default_value='2',
+            description='把持機構 (gripper<i> と suction<i>) の数。0 なら立てない'),
+        DeclareLaunchArgument(
+            'gripper_params', default_value=config('oumuamua_bringup', 'gripper.yaml'),
+            description='gripper_node (gripper0..) のパラメータファイル'),
+        DeclareLaunchArgument(
+            'suction_params', default_value=config('oumuamua_bringup', 'suction.yaml'),
+            description='吸引の mini_shirasu_node (suction0..) のパラメータファイル'),
         DeclareLaunchArgument('bridge', default_value='true', description='robomas_bridge (USB-CAN) を起動する'),
         DeclareLaunchArgument('rviz', default_value='false', description='RViz2 を起動する'),
         DeclareLaunchArgument(
@@ -561,12 +625,15 @@ def generate_launch_description():
             'velocity_source', default_value='wheels', choices=['wheels', 'cmd_vel'],
             description='state_estimator の速度入力。wheels: 車輪オドメトリ、cmd_vel: 指令値'),
         DeclareLaunchArgument(
-            'cmd_tau', default_value='0.1',
-            description='velocity_source:=cmd_vel のときの、指令への追従の時定数 [s]'),
+            'cmd_tau', default_value='0.18',
+            description='velocity_source:=cmd_vel のときの、指令への追従の時定数 [s]。実機の記録 (wkp 1.6) で 0.18 s'),
         DeclareLaunchArgument(
             'path_dir',
             default_value=PathJoinSubstitution([FindPackageShare('oumuamua_bringup'), 'config', 'paths']),
             description='path_follower の経路ファイル (make_path.py で作った CSV) を置いた場所。どれを読むかは path_follower.yaml の paths'),
+        DeclareLaunchArgument(
+            'odometry_only', default_value='false',
+            description='初期位置だけ LiDAR で合わせ、動き出したら車輪オドメトリだけで自己位置を出す (state_estimator の dead_reckoning)'),
         DeclareLaunchArgument(
             'sim', default_value='false',
             description='/cmd_vel から先を oumuamua_sim で模擬する (LiDAR・足回り・ドライバ・USB-CAN は立てない)'),
@@ -586,6 +653,8 @@ def generate_launch_description():
         nav2,
         chassis,
         wheels,
+        grippers,
+        task_commander,
         robomas,
         robot_sim,
         rviz_node,

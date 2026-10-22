@@ -8,4 +8,10 @@ tracker_node:
     odom_topic: /state_estimator/odom
     cmd_vel_topic: /cmd_vel
     cmd_vel_stamped: true       # state_estimator の速度入力に cmd_vel をつなぐこともあるので時刻付き
-    limits.max_velocity_linear: 2.0
+    # 追従の上限。path_follower の計画 (2.0 m/s, 2.5 m/s^2, 2.5 rad/s) より、ずれを戻すぶんだけ緩く、
+    # 足回り (車輪 120 rad/s = 3.5 m/s。並進と旋回で分け合う: 2.5 + 4.0 * 0.2 = 3.3 m/s) には収まるようにしてある
+    limits:
+      max_velocity_linear: 2.5   # [m/s]
+      max_velocity_angular: 4.0  # [rad/s]
+      max_accel_linear: 4.0      # [m/s^2]
+      max_accel_angular: 15.0    # [rad/s^2]
