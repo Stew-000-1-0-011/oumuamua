@@ -54,6 +54,12 @@ namespace path_follower {
 		std::vector<double> time_{};   ///< 各点に着く時刻
 	};
 
+	/// 頂点 (x, y, yaw) を順に直線でつないだ経路を、spacing [m] 間隔の点にする。
+	/// 向きは各辺の上で一定の割合で回す。頂点の yaw は、前の頂点から近いほうへ回るように ±2pi を足し直す。
+	/// 位置が同じ頂点が続くとき、向きも同じなら飛ばし、違えば (その場での旋回になるので) std::invalid_argument。
+	/// 点が 2 つ未満になるとき (全部同じ位置) も std::invalid_argument
+	auto polyline_path(const std::vector<PathPoint>& vertices, double spacing) -> std::vector<PathPoint>;
+
 	/// CSV (1行に x, y, yaw) を読む。'#' で始まる行、空行、数値でない先頭行 (見出し) は飛ばす。
 	/// 数値として読めない行があれば std::invalid_argument
 	auto load_path_csv(std::istream& in) -> std::vector<PathPoint>;

@@ -1,0 +1,20 @@
+# 機体に作業を 1 つさせる。作業中に次のゴールが来たら断る (先に取り消すこと)。
+# 座標や高さは task_commander.yaml と gripper.yaml で決める
+uint8 PICK = 0               # 把持機構 gripper で、ノーツゾーンのブロック block (0..) を回収する
+uint8 TO_SLALOM_ENTRANCE = 1 # スラロームの入口へ移動する (スタートゾーン側)
+uint8 TO_START = 2           # スタート地点へ移動する
+uint8 SLALOM_FORWARD = 3     # スラロームの往路 (入口 -> 出口)
+uint8 SLALOM_BACKWARD = 4    # スラロームの復路 (出口 -> 入口)
+uint8 PLACE = 5              # 把持機構 gripper が持っているブロックを、棚の列 column (0..2)、段 row (0 = 1 段目) に置く
+uint8 TO_SLALOM_EXIT = 6     # スラロームの出口へ移動する (ゴールゾーン側)
+
+uint8 type
+int32 gripper                # PICK, PLACE
+int32 block                  # PICK
+int32 column                 # PLACE
+int32 row                    # PLACE
+---
+bool success
+string message
+---
+string step                  # 今やっていること
