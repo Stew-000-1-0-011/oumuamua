@@ -53,6 +53,9 @@ namespace {
 		check(near(c.revolutions(), 30000.0 / 8192.0, 1e-12), "counts many revolutions");
 		c.reset();
 		check(!c.valid(), "reset forgets the last angle");
+		check(c.revolutions() == 0.0, "reset starts the count from 0 again (~/zero_lift)");
+		c.update(5000);
+		check(c.revolutions() == 0.0, "the first angle after a reset is the origin");
 	}
 
 	void test_ramp() {

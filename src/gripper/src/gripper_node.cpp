@@ -247,7 +247,9 @@ namespace {
 		/// 今の高さ [m]。フィードバックが無ければ送っている指令
 		auto height() -> double {
 			if (this->feedback_valid()) {
-				return this->counter_.revolutions() / this->gear_ratio_ * this->meters_per_output_revolution_;
+				// ロータは目標と同じ向きに数える: target_scale が負なら、高さが増えるとロータの回転は減る
+				const double sign = this->target_scale_ < 0.0 ? -1.0 : 1.0;
+				return sign * this->counter_.revolutions() / this->gear_ratio_ * this->meters_per_output_revolution_;
 			}
 			return this->ramp_.position();
 		}

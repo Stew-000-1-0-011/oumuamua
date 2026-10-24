@@ -31,7 +31,10 @@ namespace gripper {
 		auto valid() const -> bool { return this->last_.has_value(); }
 		/// 最初の角度からのロータの回転量 [回転]
 		auto revolutions() const -> double;
-		void reset() { this->last_.reset(); }
+		void reset() {
+			this->last_.reset();
+			this->counts_ = 0;
+		}
 
 	private:
 		std::optional<std::uint16_t> last_{};

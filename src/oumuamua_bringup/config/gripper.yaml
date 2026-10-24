@@ -34,8 +34,7 @@
       meters_per_output_revolution: 0.0942478   # 2π × 0.015 m
       feedback_timeout: 0.2
       min_height: 0.0
-      # 今は暫定の配線で 200 mm までしか上がらないので、1 cm 余裕を残す
-      max_height: 0.19
+      max_height: 0.85
       # 初めて動かすので遅めに (ロータで約 1100 rpm)
       max_speed: 0.05
       tolerance: 0.005
@@ -46,7 +45,7 @@
       #           0: 下   1: 中段   2: 上段
       positions: [0.0,   0.09,     0.18]
       position_names: [bottom, middle, top]
-      # 配線を直して棚まで上がるようになったら、max_height を 0.85 にして positions を次に替える
+      # 棚の段まで使うときは positions を次に替える
       # (task_commander.yaml の lift.* はこの並びを前提にしている)。ルール (千葉大学ロボットコンテスト 2026) の寸法と、次の仮定から決めた:
       # - 吸着面はブロック (一辺 0.15 m) を上から吸う。起動時 (昇降 0) の吸着面の高さは 0.15 m = 床のブロックの上面
       #   (なので、昇降の高さ = 吸っているブロックの下面の高さ)
@@ -58,7 +57,8 @@
       # positions: [0.0, 0.03, 0.12, 0.340, 0.325, 0.573, 0.558, 0.807, 0.792]
       # position_names: [pick, clear, carry, row0_approach, row0_release, row1_approach, row1_release, row2_approach, row2_release]
     suction:
-      current: 0.0
+      # ほぼ全開で回す (基板の電流ループが duty_max まで出す)。上限は suction.yaml の settings.imax (8 A)
+      current: 7.5
     robomas_frame_topic: /robomas_frame
     can_rx_topic: /robomas_can_rx
 
@@ -75,6 +75,8 @@ gripper1:
   ros__parameters:
     lift:
       motor: 2
+      # 右はモータの付け方が左と逆なので、目標の向きも逆
+      target_scale: 137509.9
     suction:
       target_topic: /suction1/target_current
 
