@@ -104,7 +104,7 @@ ros2 launch oumuamua_bringup bringup.launch.py
   回収・配置のときの機体の向き
 - `src/oumuamua_bringup/config/gripper.yaml`, `suction.yaml`: 把持機構。ロボマスの ID と種類、昇降の高さ (`lift.positions`)、ボードの位置目標の単位
   (`lift.target_scale`)、行程、吸引の電流 (`suction.current` は 0 A にしてあるので、このままでは吸わない)、
-  吸引の基板の CAN ID (基板 3, 4 = 0x113.., 0x114.. を割り当てている)
+  吸引の基板の CAN ID (左が基板 4 = 0x114..、右が基板 5 = 0x115..)
 
 モータドライバの設定 (`settings.*`) は mini-shirasu2 の `bench.rs` で実機が動いた値で、
 速度・位置は駆動軸 (ホイール) 基準。そのため chassis_node の `gear_ratio` は ±1、
