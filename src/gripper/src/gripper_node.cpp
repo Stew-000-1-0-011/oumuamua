@@ -18,6 +18,7 @@
 /// | action | `~/move_lift` | gripper/action/MoveLift (高さ [m] を直接指定。調整用) |
 /// | srv | `~/set_suction` | std_srvs/SetBool (オン/オフ) |
 /// | srv | `~/enable_lift` | std_srvs/SetBool (true で位置制御、false で無効) |
+/// | srv | `~/zero_lift` | std_srvs/Trigger (今の位置を高さ 0 にし直す) |
 /// | pub | `~/state` | gripper/msg/GripperState |
 
 #include <algorithm>
@@ -36,6 +37,7 @@
 #include <robomas_plugins/msg/robomas_target.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <std_srvs/srv/set_bool.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include "gripper/action/move_lift.hpp"
 #include "gripper/lift.hpp"
@@ -140,6 +142,14 @@ namespace {
 					res->message = req->data ? "lift enabled (position control)" : "lift disabled";
 				}
 			);
+			this->zero_srv_ = this->create_service<std_srvs::srv::Trigger>(
+				"~/zero_lift",
+				[this](const std::shared_ptr<std_srvs::srv::Trigger::Request>, std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+					this->zero_lift();
+					res->success = true;
+					res->message = "lift zeroed at the current position";
+				}
+			);
 			this->action_server_ = rclcpp_action::create_server<MoveLift>(
 				this,
 				"~/move_lift",
@@ -181,6 +191,22 @@ namespace {
 				this->stop_move();
 			}
 			RCLCPP_INFO(this->get_logger(), "lift %s", enabled ? "enabled (position control)" : "disabled");
+		}
+
+		/// 今の位置を高さ 0 にし直す (起動したときと同じ状態にする)。
+		/// ボードには原点を決める命令が無く、位置制御を有効にした位置を 0 とするので、無効 -> 有効を送り直す。
+		/// 無効のときは、次に有効にした位置が 0 になる
+		void zero_lift() {
+			this->abort_goal("lift zeroed");
+			this->stop_move();
+			this->ramp_ = gripper::Ramp{0.0};
+			this->counter_.reset();
+			this->last_feedback_.reset();
+			if (this->lift_enabled_) {
+				this->send_mode(mode_disable);
+				this->send_mode(mode_position);
+			}
+			RCLCPP_INFO(this->get_logger(), "lift zeroed at the current position");
 		}
 
 		void send_mode(const std::uint8_t mode) {
@@ -460,6 +486,7 @@ namespace {
 		rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr suction_srv_{};
 		rclcpp::Service<SetLiftPosition>::SharedPtr position_srv_{};
 		rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr enable_srv_{};
+		rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr zero_srv_{};
 		rclcpp_action::Server<MoveLift>::SharedPtr action_server_{};
 		rclcpp::TimerBase::SharedPtr timer_{};
 		rclcpp::TimerBase::SharedPtr config_timer_{};

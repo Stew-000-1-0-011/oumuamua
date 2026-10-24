@@ -30,8 +30,9 @@
 | action | `~/move_lift` | `gripper/action/MoveLift` (ゴール: 高さ [m] を直接。調整用) |
 | srv | `~/set_suction` | `std_srvs/srv/SetBool` (true でオン、false でオフ) |
 | srv | `~/enable_lift` | `std_srvs/srv/SetBool` (true で位置制御、false で無効) |
+| srv | `~/zero_lift` | `std_srvs/srv/Trigger` (今の位置を高さ 0 にし直す。動いている途中なら止め、アクションのゴールは失敗で終わる) |
 | pub | `~/state` | `gripper/msg/GripperState` |
-| pub | `robomas_frame_topic` (既定 `/robomas_frame`) | `robomas_plugins/msg/RobomasFrame` (起動時・有効/無効の切り替え時) |
+| pub | `robomas_frame_topic` (既定 `/robomas_frame`) | `robomas_plugins/msg/RobomasFrame` (起動時・有効/無効の切り替え時・`~/zero_lift`) |
 | pub | `robomas_target_topic` (既定 `/robomas_target<lift.motor>`) | `robomas_plugins/msg/RobomasTarget` (`control_rate` で) |
 | pub | `suction.target_topic` | `std_msgs/msg/Float64` [A] (`control_rate` で) |
 | sub | `can_rx_topic` (既定 `/robomas_can_rx`) | `robomas_plugins/msg/Frame` (ロボマスのフィードバック 0x200 + k) |
