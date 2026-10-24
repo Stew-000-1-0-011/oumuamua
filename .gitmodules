@@ -22,3 +22,7 @@
 	path = src/mini_shirasu_ros
 	url = https://github.com/Stew-000-1-0-011/mini_shirasu_ros.git
 	branch = main
+[submodule "src/oumuamua-controller"]
+	path = src/oumuamua-controller
+	url = https://github.com/Stew-000-1-0-011/oumuamua-controller
+	branch = main
