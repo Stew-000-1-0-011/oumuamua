@@ -82,37 +82,40 @@ namespace {
 		TaskCommanderNode() : rclcpp::Node("task_commander") {
 			this->group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
-			// --- フィールドと機体 ---
+			// --- フィールド (field.yaml の field.*) と機体 ---
 			const auto bounds = this->declare_parameter<std::vector<double>>("field.bounds");
-			const auto walls = task_commander::boxes_from_flat(this->declare_parameter<std::vector<double>>("field.obstacles"), "field.obstacles");
-			if (bounds.size() != 4) {
-				throw std::invalid_argument("field.bounds must be [xmin, ymin, xmax, ymax]");
+			auto walls = task_commander::boxes_from_flat(this->declare_parameter<std::vector<double>>("field.walls"), "field.walls");
+			const auto shelf = task_commander::boxes_from_flat(this->declare_parameter<std::vector<double>>("field.shelf"), "field.shelf");
+			if (bounds.size() != 4 || shelf.size() != 1) {
+				throw std::invalid_argument("field.bounds and field.shelf must be [xmin, ymin, xmax, ymax]");
 			}
 			this->field_.bounds = Box{bounds[0], bounds[1], bounds[2], bounds[3]};
+			// 棚も壁と同じく避ける
+			walls.push_back(shelf.front());
 			this->walls_ = walls;
 			this->robot_radius_ = this->declare_parameter<double>("robot_radius");
 			this->min_clearance_ = this->declare_parameter<double>("min_clearance");
 
 			// --- 場所 ---
-			this->start_pose_ = pose_from(this->declare_parameter<std::vector<double>>("start_pose"), "start_pose");
+			this->start_pose_ = pose_from(this->declare_parameter<std::vector<double>>("field.start_pose"), "field.start_pose");
 			this->slalom_entrance_ = pose_from(this->declare_parameter<std::vector<double>>("slalom.entrance"), "slalom.entrance");
 			this->slalom_exit_ = pose_from(this->declare_parameter<std::vector<double>>("slalom.exit"), "slalom.exit");
 			this->forward_route_ = this->declare_parameter<std::string>("slalom.forward_route");
 			this->backward_route_ = this->declare_parameter<std::string>("slalom.backward_route");
 
 			// ノーツ (ブロック) は床に置かれた立方体。中心の x を並べる
-			this->blocks_x_ = this->declare_parameter<std::vector<double>>("notes.x");
-			this->blocks_y_ = this->declare_parameter<double>("notes.y");
-			this->block_size_ = this->declare_parameter<double>("notes.size");
+			this->blocks_x_ = this->declare_parameter<std::vector<double>>("field.notes_x");
+			this->blocks_y_ = this->declare_parameter<double>("field.notes_y");
+			this->block_size_ = this->declare_parameter<double>("field.note_size");
 			this->picked_.assign(this->blocks_x_.size(), false);
 			this->pick_yaw_ = this->declare_parameter<double>("pick.yaw");
 			this->pick_standoff_ = this->declare_parameter<double>("pick.standoff");
 			this->grip_time_ = this->declare_parameter<double>("pick.grip_time");
 
-			// 棚 (ビンゴ): 列の中心の x、自チーム側の面の y、ブロックの中心を面からどれだけ奥に置くか
-			this->columns_x_ = this->declare_parameter<std::vector<double>>("shelf.columns_x");
-			this->rows_ = static_cast<int>(this->declare_parameter<std::int64_t>("shelf.rows"));
-			this->shelf_face_y_ = this->declare_parameter<double>("shelf.face_y");
+			// 棚 (ビンゴ): 列の中心の x、自チーム側の面の y (棚の箱の ymax)、ブロックの中心を面からどれだけ奥に置くか
+			this->columns_x_ = this->declare_parameter<std::vector<double>>("field.shelf_columns_x");
+			this->rows_ = static_cast<int>(this->declare_parameter<std::int64_t>("field.shelf_rows"));
+			this->shelf_face_y_ = shelf.front().ymax;
 			this->place_depth_ = this->declare_parameter<double>("shelf.place_depth");
 			this->place_yaw_ = this->declare_parameter<double>("place.yaw");
 			this->place_standoff_ = this->declare_parameter<double>("place.standoff");

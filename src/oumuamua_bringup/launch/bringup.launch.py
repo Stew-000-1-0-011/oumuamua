@@ -153,10 +153,14 @@ def generate_launch_description():
     #     executable='sotoba_node',
     #     name='sotoba_node',
     #     parameters=[
+    #         config('oumuamua_bringup', 'field.yaml'),
     #         config('oumuamua_bringup', 'sotoba_node.yaml'),
     #         NodeParams('sotoba_node', {
     #             'lidar_height': LaunchConfiguration('lidar_z'),
     #             'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
+    #             'lidar_x': LaunchConfiguration('lidar_x'),
+    #             'lidar_y': LaunchConfiguration('lidar_y'),
+    #             'lidar_yaw': LaunchConfiguration('lidar_yaw'),
     #             'publish_tf': not_estimator,
     #         }),
     #     ],
@@ -298,6 +302,7 @@ def generate_launch_description():
         executable='task_commander_node',
         name='task_commander',
         parameters=[
+            config('oumuamua_bringup', 'field.yaml'),
             config('oumuamua_bringup', 'task_commander.yaml'),
             NodeParams('task_commander', {
                 'odom_topic': PythonExpression(
@@ -326,12 +331,13 @@ def generate_launch_description():
     )
 
     # --- シミュレータ (sim:=true) ---
-    # フィールドの寸法・初期姿勢・LiDAR の高さと上下は sotoba_node と同じ値を読ませる
+    # フィールド (field.yaml) とノーツの有無は sotoba_node と同じファイルを読ませる。LiDAR の取付は launch 引数から
     robot_sim = Node(
         package='oumuamua_sim',
         executable='robot_sim',
         name='robot_sim',
         parameters=[
+            config('oumuamua_bringup', 'field.yaml'),
             config('oumuamua_bringup', 'sotoba_node.yaml'),
             config('oumuamua_bringup', 'robot_sim.yaml'),
             NodeParams('robot_sim', {

@@ -28,8 +28,10 @@
       - [0.3, -0.1]
     lidar: [0.28, 0.0]       # 任意。LiDAR の取付位置 (機体座標系)。図に軌跡を描く
     min_clearance: 0.03      # 任意。外形と障害物の間に最低これだけ空ける [m] (既定 0)
-    bounds: [xmin, ymin, xmax, ymax]         # 任意。走れる範囲 (外周壁の内側の面)
-    obstacles:                               # 任意。軸に平行な箱 [xmin, ymin, xmax, ymax]
+    field: ../field.yaml                     # 任意。フィールドのパラメータファイル (経路の定義からの相対パス)。
+                                             # その field.bounds を bounds に、field.walls と field.shelf を obstacles に使う
+    bounds: [xmin, ymin, xmax, ymax]         # 任意。走れる範囲 (外周壁の内側の面)。field より優先
+    obstacles:                               # 任意。軸に平行な箱 [xmin, ymin, xmax, ymax]。field のものに足す
       - [0.8, -0.1, 0.9, 0.5]
 
 障害物を書いておくと、機体の外形 (向きも考える) から障害物までの最小の間隔を出し、
@@ -37,9 +39,23 @@ min_clearance より小さければ失敗する (ファイルは作らない)。
 """
 import argparse
 import math
+import os
 import sys
 
 import yaml
+
+
+def load_field(path):
+    """フィールドのパラメータファイル (/**: ros__parameters: field: ...) から外周と障害物 (壁と棚) を読む。"""
+    with open(path) as f:
+        doc = yaml.safe_load(f)
+    field = next(iter(doc.values()))['ros__parameters']['field']
+    walls = [float(v) for v in field['walls']]
+    if len(walls) % 4:
+        raise ValueError(f'{path}: field.walls must be [xmin, ymin, xmax, ymax, ...]')
+    boxes = [walls[i:i + 4] for i in range(0, len(walls), 4)]
+    boxes.append([float(v) for v in field['shelf']])
+    return {'bounds': [float(v) for v in field['bounds']], 'obstacles': boxes}
 
 
 def rounded_polyline(corners, spacing):
@@ -168,7 +184,11 @@ def main():
         path.reverse()
 
     bounds = route.get('bounds')
-    obstacles = route.get('obstacles', [])
+    obstacles = list(route.get('obstacles', []))
+    if route.get('field'):
+        field = load_field(os.path.join(os.path.dirname(os.path.abspath(args.route)), route['field']))
+        bounds = bounds or field['bounds']
+        obstacles = field['obstacles'] + obstacles
     radius = float(route.get('robot_radius', 0.0))
     margin = float(route.get('min_clearance', 0.0))
     body = outline(route)

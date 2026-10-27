@@ -2,8 +2,10 @@
 # sotoba_node は予測をしない。事前分布を出すノードと publish_tf は bringup.launch.py が estimator 引数で決める:
 #   estimator:=true  -> state_estimator が事前を出す。TF は state_estimator が出す
 #   estimator:=false -> sotoba_ros の persistence_predictor (持続予測) が事前を出す。TF field -> base_link を sotoba が出す
-# lidar_height / lidar_upside_down / publish_tf は bringup.launch.py が launch 引数 (lidar_z, lidar_upside_down, estimator) で上書きする。
-# sim:=true の robot_sim もこのファイルを読む (フィールドの寸法・初期姿勢・ノーツの有無を合わせるため)。
+# フィールドの形 (壁・棚・ノーツ) と機体のスタート位置は field.yaml (field.*) から読む。このファイルと一緒に読ませること。
+# LiDAR の取付 (lidar_x / lidar_y / lidar_yaw / lidar_height / lidar_upside_down) と publish_tf は、
+# bringup.launch.py が launch 引数 (lidar_x, lidar_y, lidar_yaw, lidar_z, lidar_upside_down, estimator) で上書きする。
+# sim:=true の robot_sim もこのファイルを読む (ノーツの有無を合わせるため)。
 /**:
   ros__parameters:
     # 購読する LaserScan のトピック
@@ -11,21 +13,14 @@
 
     # --- 実機に合わせて必ず確認するもの ---
     # LiDAR の取付高 [m] (走査面がフィールド床から何mにあるか)。
-    # 壁の高さ以上だと壁が1本も見えない。ノーツ(0.15m)以上だとノーツも見えない
+    # 壁の高さ (field.wall_height) 以上だと壁が1本も見えない。ノーツ (field.note_size) 以上だとノーツも見えない
     lidar_height: 0.14
-    # 壁の高さ [m]。JSONでは暫定的に 0.3 だが、競技規定は 0.1
-    wall_height: 0.3
-    # 壁の厚み [m] (JSONに 0.033 / 0.038 の食い違いのメモあり)
-    wall_thickness: 0.033
-    # ロボットの初期位置 [m] と向き [rad] (フィールド座標系。原点はフィールド中心の床面)。
-    # ICPの初期シードなので、実際の置き場所と 0.1m 程度以内で合わせること。
-    # **LiDAR の姿勢**で、機体中心 (base_link) ではない。
-    # 機体中心を経路の始点 (config/paths/start_to_shelf.route.yaml の corners の先頭、(-2.2, 1.3)) に
-    # +x (ビンゴ側) 向きで置いたとき、LiDAR はその 0.28 m 前 (launch 引数 lidar_x) にある。
-    # -y 側の半面に置くなら start_y と start_yaw の符号を反転させる
-    start_x: -1.92
-    start_y: 1.3
-    start_yaw: 0.0
+    # LiDAR の取付 (base_link から見た位置 [m] と向き [rad])。初期シード (LiDAR の初期姿勢) は、
+    # 機体のスタート位置 (field.yaml の start_pose) にこれを足したもの。
+    # ICPの初期シードなので、実際の置き場所と 0.1m 程度以内で合わせること
+    lidar_x: 0.28
+    lidar_y: 0.0
+    lidar_yaw: 0.0
     # LiDAR のZ軸が床を向いている (上下逆さに付いている) か
     lidar_upside_down: true
     # ノーツを推定対象に含めるか (12個ぶんオブジェクトが増える)。

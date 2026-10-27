@@ -1,6 +1,6 @@
-# robot_sim (oumuamua_sim、sim:=true) のパラメータ。robot_sim は既定値を持たないので、ここと sotoba_node.yaml に全部書く。
-# フィールドの寸法 (wall_height など) と初期姿勢 (start_*)、ノーツの有無 (include_notes) は、
-# sotoba_node と同じ sotoba_node.yaml を先に読ませて揃える (bringup.launch.py がそうしている)。
+# robot_sim (oumuamua_sim、sim:=true) のパラメータ。robot_sim は既定値を持たないので、ここと field.yaml・sotoba_node.yaml に全部書く。
+# フィールドの形とスタート位置は field.yaml (sotoba_node と同じもの)、ノーツの有無 (include_notes) は sotoba_node.yaml から読む
+# (bringup.launch.py がそれらを先に読ませている)。真の初期姿勢は field.yaml の start_pose に start_offset_* を足したもの。
 # LiDAR の取付 (lidar_x / lidar_y / lidar_yaw / lidar_height / lidar_upside_down) は bringup.launch.py が launch 引数で上書きする。
 robot_sim:
   ros__parameters:
@@ -14,7 +14,7 @@ robot_sim:
     lidar_y: 0.0
     lidar_yaw: 0.0
 
-    # --- 真の初期姿勢の、sotoba の初期シード (start_*) からのずれ (フィールド座標系) ---
+    # --- 真の初期姿勢の、スタート位置 (field.yaml の start_pose) からのずれ (フィールド座標系) ---
     start_offset_x: 0.02       # [m]
     start_offset_y: -0.01      # [m]
     start_offset_yaw: 0.01     # [rad]
@@ -64,8 +64,7 @@ robot_sim:
       room_half_y: 3.2
       room_height: 2.5
       clutter_count: 8           # フィールドの外に置く箱 (人や机の代わり、0.5 x 0.5 x 1.2 m)
-      field_half_x: 2.82         # 箱を置かない範囲 (フィールドの外周壁)
-      field_half_y: 1.69
+      field_margin: 0.034        # [m] 箱を置かない範囲 = フィールドの外周 (field.yaml の bounds) からこれだけ外 (外周壁の厚み)
 
     # --- 機体速度の実測 (車輪オドメトリの代わり) ---
     # ~/body_velocity (TwistStamped、機体座標系)。滑り (plant.velocity_scale_*) のぶんは割り戻すので、

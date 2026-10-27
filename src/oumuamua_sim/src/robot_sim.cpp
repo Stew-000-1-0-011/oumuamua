@@ -13,6 +13,7 @@
 /// sotoba_node と同じパラメータファイルを読ませれば食い違わない。
 /// `start_*` は sotoba と同じく「LiDAR の」初期姿勢で、機体の初期姿勢は LiDAR の取付から逆算する。
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <deque>
@@ -21,6 +22,7 @@
 #include <numbers>
 #include <optional>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <variant>
 #include <vector>
@@ -41,6 +43,7 @@
 #include <sotoba/math/vec.hpp>
 
 #include "oumuamua_sim/plant.hpp"
+#include "sotoba_ros/field_params.hpp"
 #include "sotoba_ros/objects.hpp"
 
 namespace {
@@ -73,14 +76,12 @@ namespace {
 	class RobotSim final : public rclcpp::Node {
 	public:
 		RobotSim() : rclcpp::Node("robot_sim") {
-			// --- フィールド (sotoba_node と同じ名前・意味) ---
+			// --- フィールド (sotoba_node と同じ field.*。棚は常に置く) ---
 			sotoba_ros::ObjectsConfig field{};
-			field.wall_height = static_cast<float>(
-				this->declare_parameter<double>("wall_height")
-			);
-			field.wall_thickness = static_cast<float>(this->declare_parameter<double>(
-				"wall_thickness"));
+			sotoba_ros::read_field(*this, field);
+			this->field_bounds_ = field.bounds;
 			field.include_notes = this->declare_parameter<bool>("include_notes");
+			field.include_shelf = true;
 			// make_objects は「LiDAR 座標系での姿勢」を返すので、原点・高さ 0・正立の LiDAR を指定して
 			// フィールド座標系での姿勢を得る
 			field.start_x = 0.f;
@@ -124,18 +125,15 @@ namespace {
 			}
 
 			// --- 初期姿勢 ---
-			// start_* は LiDAR の姿勢 (sotoba と同じ)。機体の姿勢へ直してから、真値のずれを足す
-			const double start_x = this->declare_parameter<double>("start_x");
-			const double start_y = this->declare_parameter<double>("start_y");
-			const double start_yaw =
-				this->declare_parameter<double>("start_yaw");
-			const double base_yaw = start_yaw - lidar_yaw;
+			// 機体のスタート位置 (field.start_pose。sotoba の初期シードの元) に、真値のずれを足す
+			const auto start = this->declare_parameter<std::vector<double>>("field.start_pose");
+			if (start.size() != 3) {
+				throw std::invalid_argument("field.start_pose must be [x, y, yaw]");
+			}
 			this->initial_ = Pose2{
-				.x = start_x - (std::cos(base_yaw) * lidar_x - std::sin(base_yaw) * lidar_y)
-					+ this->declare_parameter<double>("start_offset_x"),
-				.y = start_y - (std::sin(base_yaw) * lidar_x + std::cos(base_yaw) * lidar_y)
-					+ this->declare_parameter<double>("start_offset_y"),
-				.yaw = base_yaw + this->declare_parameter<double>("start_offset_yaw"),
+				.x = start[0] + this->declare_parameter<double>("start_offset_x"),
+				.y = start[1] + this->declare_parameter<double>("start_offset_y"),
+				.yaw = start[2] + this->declare_parameter<double>("start_offset_yaw"),
 			};
 
 			// --- 運動 ---
@@ -230,8 +228,11 @@ namespace {
 			const double room_y = this->declare_parameter<double>("environment.room_half_y");
 			const double room_h = this->declare_parameter<double>("environment.room_height");
 			const auto clutter = this->declare_parameter<std::int64_t>("environment.clutter_count");
-			const double field_x = this->declare_parameter<double>("environment.field_half_x");
-			const double field_y = this->declare_parameter<double>("environment.field_half_y");
+			// 箱を置かない範囲: フィールドの外周 (field.bounds) から field_margin 外側まで
+			const double margin = this->declare_parameter<double>("environment.field_margin");
+			const auto& b = this->field_bounds_;
+			const double field_x = std::max(std::abs(b.xmin), std::abs(b.xmax)) + margin;
+			const double field_y = std::max(std::abs(b.ymin), std::abs(b.ymax)) + margin;
 
 			const auto id = sotoba::math::SquareMat<3>::ide();
 			if (floor) {
@@ -463,6 +464,7 @@ namespace {
 		std::vector<Surface> environment_{};
 		SE3 base_to_lidar_{};
 		Pose2 initial_{};
+		sotoba_ros::Box2 field_bounds_{};
 		std::optional<Plant> plant_{};
 		double dt_{};
 		double cmd_timeout_{};
