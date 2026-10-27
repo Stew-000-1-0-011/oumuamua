@@ -1,4 +1,5 @@
 # 把持機構の吸引のモータ (mini_shirasu_node: suction<i>、電流制御) のパラメータ。
+# mini_shirasu_node は既定値を持たないので、全部ここに書く。項目の意味は mini_shirasu_ros の README を参照。
 # オン/オフと電流は gripper.yaml の gripper<i> が決め、/suction<i>/target_current に送ってくる。
 # !!! can_id は各基板のファームの config.rs と合わせること。足回りが基板 0..2 (0x110..0x112) を
 #     使っているので、吸引は左が基板 4、右が基板 5 !!!

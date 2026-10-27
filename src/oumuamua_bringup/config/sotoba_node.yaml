@@ -1,35 +1,148 @@
-# sotoba_node の上書き。sotoba_ros の config/sotoba_node.yaml の後に読む。
+# sotoba_node と persistence_predictor (sotoba_ros) のパラメータ。どちらも既定値を持たないので、全部ここに書く。
 # sotoba_node は予測をしない。事前分布を出すノードと publish_tf は bringup.launch.py が estimator 引数で決める:
 #   estimator:=true  -> state_estimator が事前を出す。TF は state_estimator が出す
 #   estimator:=false -> sotoba_ros の persistence_predictor (持続予測) が事前を出す。TF field -> base_link を sotoba が出す
+# lidar_height / lidar_upside_down / publish_tf は bringup.launch.py が launch 引数 (lidar_z, lidar_upside_down, estimator) で上書きする。
+# sim:=true の robot_sim もこのファイルを読む (フィールドの寸法・初期姿勢・ノーツの有無を合わせるため)。
 /**:
   ros__parameters:
-    tf_parent_frame: field
-    tf_object: field
-    # base_link -> laser (static TF) を引いて合成するので、TFツリーが二重親にならない
-    tf_child_frame: base_link
+    # 購読する LaserScan のトピック
+    scan_topic: "/scan"
 
-    # 注意: sotoba の start_x / start_y / start_yaw / lidar_height / lidar_upside_down は
-    # 「LiDAR の」初期姿勢と取付。base_link ではない。
-    # launch 引数 lidar_z / lidar_upside_down と食い違わないようにすること
-
-    # ノーツは推定対象に入れない (フィールドだけ)。実物のノーツに当たった点はモデルに無い点として扱われ、
-    # 下の外れ値対策 (huber_k / ray_gate) で落ちる。sim:=true の robot_sim も同じ値を読むので、模擬側にもノーツは出ない
-    include_notes: false
-    # ビンゴ棚も形状に入れない。実機の走行記録 (2026-10-12 run1) で、棚の前では推定が 16 cm ほどずれ、
-    # 離れると 18 cm 飛んで戻っていた。棚は箱で近似してあるが、実物は奥まで見えていて合っていない。
-    # (robot_sim はこの値を読まないので、模擬の世界には箱の棚が残る = モデルに無い物として映る)
-    include_shelf: false
-
-    # --- 外れ値対策 (LiDAR が振動で傾き、壁を越えた点や床の点が混ざる場合) ---
-    # oumuamua_sim の tilt.amplitude で比較して決めた値。README の「LiDAR の傾きへの対策」参照
-    huber_k: 2.0                 # 正規化残差 2 (sigma_range 0.03 なら 6cm) を超える点の重みを下げる
-    accept_distance_begin: 0.3   # 対応付けのゲートを初回から狭める (事前が良いので広く探さなくてよい)
-    ray_gate: 0.1                # 事前の姿勢での予測距離と 0.1m 以上違う点を捨てる
-
-    # 初期姿勢 (フィールド座標系)。**LiDAR の姿勢**で、機体中心 (base_link) ではない。
+    # --- 実機に合わせて必ず確認するもの ---
+    # LiDAR の取付高 [m] (走査面がフィールド床から何mにあるか)。
+    # 壁の高さ以上だと壁が1本も見えない。ノーツ(0.15m)以上だとノーツも見えない
+    lidar_height: 0.14
+    # 壁の高さ [m]。JSONでは暫定的に 0.3 だが、競技規定は 0.1
+    wall_height: 0.3
+    # 壁の厚み [m] (JSONに 0.033 / 0.038 の食い違いのメモあり)
+    wall_thickness: 0.033
+    # ロボットの初期位置 [m] と向き [rad] (フィールド座標系。原点はフィールド中心の床面)。
+    # ICPの初期シードなので、実際の置き場所と 0.1m 程度以内で合わせること。
+    # **LiDAR の姿勢**で、機体中心 (base_link) ではない。
     # 機体中心を経路の始点 (config/paths/start_to_shelf.route.yaml の corners の先頭、(-2.2, 1.3)) に
-    # +x (ビンゴ側) 向きで置いたとき、LiDAR はその 0.28 m 前 (launch 引数 lidar_x) にある
+    # +x (ビンゴ側) 向きで置いたとき、LiDAR はその 0.28 m 前 (launch 引数 lidar_x) にある。
+    # -y 側の半面に置くなら start_y と start_yaw の符号を反転させる
     start_x: -1.92
     start_y: 1.3
     start_yaw: 0.0
+    # LiDAR のZ軸が床を向いている (上下逆さに付いている) か
+    lidar_upside_down: true
+    # ノーツを推定対象に含めるか (12個ぶんオブジェクトが増える)。
+    # 入れない (フィールドだけ)。実物のノーツに当たった点はモデルに無い点として扱われ、
+    # 下の外れ値対策 (huber_k / ray_gate) で落ちる。sim:=true の robot_sim も同じ値を読むので、模擬側にもノーツは出ない
+    include_notes: false
+    # ビンゴ棚をフィールドの形状に含めるか。棚は中実の箱で近似してあるが、実物は格子状で奥まで見える。
+    # 入れない。実機の走行記録 (2026-10-12 run1) で、棚の前では推定が 16 cm ほどずれ、離れると 18 cm 飛んで戻っていた。
+    # (robot_sim はこの値を読まないので、模擬の世界には箱の棚が残る = モデルに無い物として映る)
+    include_shelf: false
+
+    # --- 点群の前処理 ---
+    # ICPバッファの容量。1スキャンがこれを超える分は捨てる
+    max_points: 2048
+    # 点の間引き (1なら間引かない)。計算量は点数に比例する
+    point_stride: 1
+    # 採用する距離の範囲 [m]。0以下なら LaserScan 側の range_min / range_max を使う
+    range_min: 0.0
+    range_max: 0.0
+
+    # --- ICP ---
+    max_loop_num: 20
+    # 対応点として採用する距離 [m] (最終反復のゲート)
+    # ロボコン2026フィールドは壁の間隔が狭いので、既定より小さめにしてある
+    accept_distance: 0.2
+    # 0より大きければ、1回目をこの距離として等比でゲートを絞る。初期ずれが大きいとき用。
+    # 初回から狭める (事前が良いので広く探さなくてよい)
+    accept_distance_begin: 0.3
+    # 姿勢更新量がこれ未満になったら打ち切る。0なら打ち切らない
+    convergence_delta: 0.0
+    # Tikhonov正則化 (LM減衰。事前分布とは別概念)。
+    # **成分順序は [並進(x,y,z), 回転(roll,pitch,yaw)]** で、sotoba の接空間に合わせてある
+    # (以前は回転が先だった。上流の変更に追従)。
+    # 2D LiDAR では z / roll / pitch が観測できないのでそこを抑える。
+    # 事前分布を使う場合 (use_prior: true) は事前が同じ役目をするので本来は不要
+    tikhonov: [0.0, 0.0, 1.0, 1.0, 1.0, 0.01]
+
+    # --- 重み付け (0なら無効) ---
+    # 距離方向の標準偏差 [m]。事前分布を使うなら必須
+    # (情報行列の単位を揃えるため、sotoba が 0 を拒否する)
+    sigma_range: 0.03
+    # 角度方向の標準偏差 [rad]
+    sigma_angle: 0.005
+    # Huberの閾値。sigma_* が0なら単位は [m]。
+    # 外れ値対策 (LiDAR が振動で傾き、壁を越えた点や床の点が混ざる場合)。oumuamua_sim の tilt.amplitude で比較して決めた。
+    # 正規化残差 2 (sigma_range 0.03 なら 6cm) を超える点の重みを下げる
+    huber_k: 2.0
+
+    # --- 光線ゲート (0なら無効) ---
+    # 事前の姿勢で各光線をモデルに当てて予測した距離と、実測の距離の差がこれ [m] を超える点を捨てる。
+    # LiDAR が振動で傾いて壁を越えた点 (予測より遠い) や、床・モデルに無い物に当たった点 (予測より近い) を落とす。
+    # 事前が良いとき (外部の状態推定から事前を受けるとき) 向け。事前の姿勢での予測距離と 0.1m 以上違う点を捨てる
+    ray_gate: 0.1
+    # ゲートで残る点がこの割合を切ったら、事前が外れているとみなしてゲートしない
+    ray_gate_min_ratio: 0.5
+
+    # --- RViz2 表示 ---
+    # オブジェクトの形状を MarkerArray で出すか
+    publish_markers: true
+    # 枠線の太さ [m]
+    marker_line_width: 0.03
+    # Marker の寿命 [s]。0なら消えない
+    marker_lifetime: 0.0
+    # 長方形の法線を描く長さ [m]。0なら描かない
+    marker_normal_length: 0.2
+    # オブジェクト名をテキストで出すか
+    marker_show_labels: true
+
+    # --- 事前分布 ---
+    # sotoba_node は予測をしない。事前分布 (ICP の初期値と不確かさ) は毎スキャン、
+    # 外のノードが ~/prior_beliefs に出したものを使う。来ていなければスキャンを捨てる。
+    # estimator:=false のときは persistence_predictor を一緒に立てる。
+
+    # 事前分布を正規方程式に入れるか。
+    # true だと、観測できない方向は事前のまま残り、1面しか見えないオブジェクトも
+    # 1点から解ける (sotoba の min_correspondences_with_prior)。
+    # ただし「updated」が「よく決まっている」を意味しなくなるので、
+    # 下流は ~/posterior_beliefs の情報行列を見ること。
+    # false なら事前はシードとしてだけ使う (従来の挙動)
+    use_prior: true
+
+    # 初期姿勢の確からしさ (標準偏差)。面外は取付で決まっていて動かないので厳しく
+    initial_sigma_xy: 0.05       # [m]
+    initial_sigma_z: 0.005       # [m]
+    initial_sigma_tilt: 0.005    # [rad]
+    initial_sigma_yaw: 0.05      # [rad]
+    # スキャン時刻からこれより古い事前しか無ければ、そのスキャンを捨てる [s]
+    prior_timeout: 0.5
+    # 事前を溜めておく長さ [s]。スキャン時刻以前で最新のものを使うので、
+    # スキャンの遅れ (撮ってから処理されるまで) より長くすること
+    prior_buffer_duration: 1.0
+
+    # --- TF ---
+    # 推定した姿勢をTFにも流す (起動時にしか読まない)。
+    # 「オブジェクト座標系でのLiDARの姿勢」= 自己位置として出す
+    publish_tf: false
+    tf_parent_frame: "field"
+    # どのオブジェクトを基準にするか
+    tf_object: "field"
+    # 空ならスキャンの frame_id をそのまま子にする。
+    # URDF等で既に laser の親がいる場合は base_link などを指定する
+    # (base_link -> スキャンのフレーム をTFから引いて合成する)。
+    # base_link -> laser (static TF) を引いて合成するので、TFツリーが二重親にならない
+    tf_child_frame: base_link
+
+    # --- persistence_predictor (持続予測で事前を出す最小のノード) ---
+    # 同じファイルを読む。sotoba_node 自身は読まない。
+    publish_rate: 100.0   # [Hz] 事前を出す周期
+    # 1秒あたりに増やす不確かさ (走査面内: x, y, yaw)
+    process_noise_angular: 0.5  # [rad^2/s]
+    process_noise_linear: 0.5   # [m^2/s]
+    # 走査面外 (z, roll, pitch)。2D LiDAR では観測できない方向なので、
+    # ここを大きくすると事前も観測も情報を持たない方向ができて推定が壊れる。
+    # LiDAR の取付高も傾きも動かないので、ほぼ0でよい
+    process_noise_angular_out_of_plane: 1.0e-8
+    process_noise_linear_out_of_plane: 1.0e-8
+    # 連続してこの回数だけ更新に失敗したオブジェクトを初期姿勢へ戻す (0で無効)。
+    # シードが 0.1m 以上外れると対応点ゼロのまま発散して戻ってこないので、
+    # 有効にしておくことを推奨
+    reset_after_failures: 5

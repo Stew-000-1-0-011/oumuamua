@@ -46,31 +46,31 @@ namespace {
 	class PathFollowerNode final : public rclcpp::Node {
 	public:
 		PathFollowerNode() : rclcpp::Node{"path_follower"} {
-			const auto path_file = this->declare_parameter<std::string>("path_file", "");
-			const auto path_dir = this->declare_parameter<std::string>("path_dir", "");
-			const auto path_names = this->declare_parameter<std::vector<std::string>>("paths", std::vector<std::string>{});
-			const auto reference_topic = this->declare_parameter<std::string>("reference_topic", "/tracker_node/reference");
-			const auto odom_topic = this->declare_parameter<std::string>("odom_topic", "/state_estimator/odom");
-			this->frame_id_ = this->declare_parameter<std::string>("frame_id", "field");
-			const double rate = this->declare_parameter<double>("rate", 50.0);
+			const auto path_file = this->declare_parameter<std::string>("path_file");
+			const auto path_dir = this->declare_parameter<std::string>("path_dir");
+			const auto path_names = this->declare_parameter<std::vector<std::string>>("paths");
+			const auto reference_topic = this->declare_parameter<std::string>("reference_topic");
+			const auto odom_topic = this->declare_parameter<std::string>("odom_topic");
+			this->frame_id_ = this->declare_parameter<std::string>("frame_id");
+			const double rate = this->declare_parameter<double>("rate");
 			if (!(rate > 0.0)) { throw std::invalid_argument("rate must be positive"); }
 
 			const Limits limits = this->limits_ = Limits{
-				.max_speed = this->declare_parameter<double>("limits.max_speed", 0.5),
-				.max_accel = this->declare_parameter<double>("limits.max_accel", 1.0),
-				.max_lateral_accel = this->declare_parameter<double>("limits.max_lateral_accel", 1.0),
-				.max_yaw_rate = this->declare_parameter<double>("limits.max_yaw_rate", 1.5),
+				.max_speed = this->declare_parameter<double>("limits.max_speed"),
+				.max_accel = this->declare_parameter<double>("limits.max_accel"),
+				.max_lateral_accel = this->declare_parameter<double>("limits.max_lateral_accel"),
+				.max_yaw_rate = this->declare_parameter<double>("limits.max_yaw_rate"),
 			};
-			this->start_tolerance_ = this->declare_parameter<double>("start_tolerance", 0.15);
-			this->max_tracking_error_ = this->declare_parameter<double>("max_tracking_error", 0.15);
-			this->odom_timeout_ = this->declare_parameter<double>("odom_timeout", 0.5);
-			this->hold_at_goal_ = this->declare_parameter<bool>("hold_at_goal", true);
-			const bool auto_start = this->declare_parameter<bool>("auto_start", false);
-			this->spacing_ = this->declare_parameter<double>("spacing", 0.01);
-			this->goal_tolerance_ = this->declare_parameter<double>("goal_tolerance", 0.03);
-			this->goal_yaw_tolerance_ = this->declare_parameter<double>("goal_yaw_tolerance", 0.05);
-			this->goal_settle_time_ = this->declare_parameter<double>("goal_settle_time", 0.2);
-			this->goal_timeout_ = this->declare_parameter<double>("goal_timeout", 3.0);
+			this->start_tolerance_ = this->declare_parameter<double>("start_tolerance");
+			this->max_tracking_error_ = this->declare_parameter<double>("max_tracking_error");
+			this->odom_timeout_ = this->declare_parameter<double>("odom_timeout");
+			this->hold_at_goal_ = this->declare_parameter<bool>("hold_at_goal");
+			const bool auto_start = this->declare_parameter<bool>("auto_start");
+			this->spacing_ = this->declare_parameter<double>("spacing");
+			this->goal_tolerance_ = this->declare_parameter<double>("goal_tolerance");
+			this->goal_yaw_tolerance_ = this->declare_parameter<double>("goal_yaw_tolerance");
+			this->goal_settle_time_ = this->declare_parameter<double>("goal_settle_time");
+			this->goal_timeout_ = this->declare_parameter<double>("goal_timeout");
 
 			// 経路: path_dir/<名前>.csv を paths の順に。path_file があれば、それも (名前はファイル名から)
 			std::vector<std::pair<std::string, std::string>> files{};
@@ -432,7 +432,7 @@ auto main(int argc, char** argv) -> int {
 	rclcpp::init(argc, argv);
 	try {
 		rclcpp::spin(std::make_shared<PathFollowerNode>());
-	} catch (const std::invalid_argument& e) {
+	} catch (const std::exception& e) {
 		RCLCPP_FATAL(rclcpp::get_logger("path_follower"), "%s", e.what());
 		rclcpp::shutdown();
 		return 1;

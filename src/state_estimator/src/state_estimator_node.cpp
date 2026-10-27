@@ -78,49 +78,49 @@ namespace {
 	public:
 		StateEstimatorNode() : rclcpp::Node("state_estimator") {
 			// --- 起動時のみ ---
-			this->field_frame_ = this->declare_parameter<std::string>("field_frame", "field");
-			this->base_frame_ = this->declare_parameter<std::string>("base_frame", "base_link");
-			this->lidar_frame_ = this->declare_parameter<std::string>("lidar_frame", "laser");
-			this->field_object_ = this->declare_parameter<std::string>("field_object", "field");
+			this->field_frame_ = this->declare_parameter<std::string>("field_frame");
+			this->base_frame_ = this->declare_parameter<std::string>("base_frame");
+			this->lidar_frame_ = this->declare_parameter<std::string>("lidar_frame");
+			this->field_object_ = this->declare_parameter<std::string>("field_object");
 			const auto posterior_topic =
-				this->declare_parameter<std::string>("posterior_topic", "/sotoba_node/posterior_beliefs");
-			const auto prior_topic = this->declare_parameter<std::string>("prior_topic", "/sotoba_node/prior_beliefs");
+				this->declare_parameter<std::string>("posterior_topic");
+			const auto prior_topic = this->declare_parameter<std::string>("prior_topic");
 			const auto initial_topic =
-				this->declare_parameter<std::string>("initial_topic", "/sotoba_node/initial_beliefs");
-			this->publish_tf_ = this->declare_parameter<bool>("publish_tf", true);
-			const double rate = this->declare_parameter<double>("publish_rate", 100.0);
+				this->declare_parameter<std::string>("initial_topic");
+			this->publish_tf_ = this->declare_parameter<bool>("publish_tf");
+			const double rate = this->declare_parameter<double>("publish_rate");
 
 			// --- 実行中に変えられる ---
-			this->declare_parameter<double>("input_delay", 0.0);
-			this->declare_parameter<double>("measurement_timeout", 0.5);
+			this->declare_parameter<double>("input_delay");
+			this->declare_parameter<double>("measurement_timeout");
 			// true なら、止まっている間だけ sotoba の事後で初期位置を合わせ、機体が動き出したら
 			// 速度の入力 (車輪オドメトリなど) だけで姿勢を進める
-			this->declare_parameter<bool>("dead_reckoning", false);
-			this->declare_parameter<double>("initial_sigma_xy", 0.05);
-			this->declare_parameter<double>("initial_sigma_yaw", 0.05);
-			this->declare_parameter<bool>("subtract_prior", true);
-			this->declare_parameter<double>("measurement_floor_xy", 0.002);
-			this->declare_parameter<double>("measurement_floor_yaw", 0.002);
-			this->declare_parameter<int>("inflate_after_failures", 3);
-			this->declare_parameter<double>("inflate_sigma_xy", 0.05);
-			this->declare_parameter<double>("inflate_sigma_yaw", 0.05);
-			this->declare_parameter<bool>("track_relations", true);
+			this->declare_parameter<bool>("dead_reckoning");
+			this->declare_parameter<double>("initial_sigma_xy");
+			this->declare_parameter<double>("initial_sigma_yaw");
+			this->declare_parameter<bool>("subtract_prior");
+			this->declare_parameter<double>("measurement_floor_xy");
+			this->declare_parameter<double>("measurement_floor_yaw");
+			this->declare_parameter<int>("inflate_after_failures");
+			this->declare_parameter<double>("inflate_sigma_xy");
+			this->declare_parameter<double>("inflate_sigma_yaw");
+			this->declare_parameter<bool>("track_relations");
 
-			this->declare_parameter<double>("filter.tau_linear", 0.0);
-			this->declare_parameter<double>("filter.tau_angular", 0.0);
-			this->declare_parameter<double>("filter.velocity_noise_linear", 1.0);
-			this->declare_parameter<double>("filter.velocity_noise_angular", 4.0);
-			this->declare_parameter<double>("filter.input_sigma_linear", 0.05);
-			this->declare_parameter<double>("filter.input_sigma_angular", 0.1);
-			this->declare_parameter<double>("filter.pose_noise_linear", 0.01);
-			this->declare_parameter<double>("filter.pose_noise_angular", 0.01);
-			this->declare_parameter<double>("filter.gate_sigma", 0.0);
-			this->declare_parameter<double>("filter.max_horizon", 0.5);
+			this->declare_parameter<double>("filter.tau_linear");
+			this->declare_parameter<double>("filter.tau_angular");
+			this->declare_parameter<double>("filter.velocity_noise_linear");
+			this->declare_parameter<double>("filter.velocity_noise_angular");
+			this->declare_parameter<double>("filter.input_sigma_linear");
+			this->declare_parameter<double>("filter.input_sigma_angular");
+			this->declare_parameter<double>("filter.pose_noise_linear");
+			this->declare_parameter<double>("filter.pose_noise_angular");
+			this->declare_parameter<double>("filter.gate_sigma");
+			this->declare_parameter<double>("filter.max_horizon");
 
-			this->declare_parameter<double>("prior.sigma_z", 0.005);
-			this->declare_parameter<double>("prior.sigma_tilt", 0.005);
-			this->declare_parameter<double>("prior.relation_sigma_xy", 0.02);
-			this->declare_parameter<double>("prior.relation_sigma_yaw", 0.05);
+			this->declare_parameter<double>("prior.sigma_z");
+			this->declare_parameter<double>("prior.sigma_tilt");
+			this->declare_parameter<double>("prior.relation_sigma_xy");
+			this->declare_parameter<double>("prior.relation_sigma_yaw");
 
 			this->load_params();
 			this->param_cb_ = this->add_post_set_parameters_callback(
@@ -589,7 +589,14 @@ namespace {
 
 auto main(int argc, char** argv) -> int {
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<StateEstimatorNode>());
+	try {
+		rclcpp::spin(std::make_shared<StateEstimatorNode>());
+	} catch (const std::exception& e) {
+		// パラメータが足りないときなど (既定値は持たないので、全部パラメータファイルで与える)
+		RCLCPP_FATAL(rclcpp::get_logger("state_estimator"), "%s", e.what());
+		rclcpp::shutdown();
+		return 1;
+	}
 	rclcpp::shutdown();
 	return 0;
 }

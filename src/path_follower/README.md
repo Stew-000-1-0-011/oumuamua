@@ -14,8 +14,10 @@
 | `scripts/make_path.py` | 経路の定義 (YAML) -> 経路ファイル (CSV)。障害物との間隔の確認と図も出せる |
 | `include/path_follower/trajectory.hpp`, `src/trajectory.cpp` | 経路ファイルの読み込みと速度計画。ROS非依存 |
 | `src/path_follower_node.cpp` | ノード本体 |
-| `config/path_follower.yaml` | パラメータ |
 | `test/trajectory_test.cpp` | 速度計画のテスト (ROS不要) |
+
+
+**パラメータに既定値は無い。** 全部パラメータファイルで与える (足りなければ起動時にエラーで止まる)。この機体の値と各項目の説明は oumuamua の `src/oumuamua_bringup/config/path_follower.yaml` にある。
 
 ## 経路を作る
 
@@ -43,7 +45,7 @@ ros2 run path_follower make_path.py route.yaml path_back.csv --reverse   # 同�
 ## 走らせる
 
 ```bash
-ros2 run path_follower path_follower_node --ros-args --params-file config/path_follower.yaml -p path_file:=/path/to/path.csv
+ros2 run path_follower path_follower_node --ros-args --params-file /path/to/oumuamua/src/oumuamua_bringup/config/path_follower.yaml -p path_file:=/path/to/path.csv
 ros2 service call /path_follower/start std_srvs/srv/Trigger    # 走り出す
 ros2 service call /path_follower/stop std_srvs/srv/Trigger     # 目標を出すのをやめる (追従ノードが止める)
 ```
@@ -53,9 +55,9 @@ ros2 service call /path_follower/stop std_srvs/srv/Trigger     # 目標を出す
 
 | 方向 | 名前 | 型 |
 | --- | --- | --- |
-| pub | `reference_topic` (既定 `/tracker_node/reference`) | `holonomic_tracker/msg/TrackingReference` (位置・向き・速度FF) |
+| pub | `reference_topic` (例 `/tracker_node/reference`) | `holonomic_tracker/msg/TrackingReference` (位置・向き・速度FF) |
 | pub | `~/path` | `nav_msgs/msg/Path` (最後に走り出した経路。RViz 用、transient local) |
-| sub | `odom_topic` (既定 `/state_estimator/odom`) | `nav_msgs/msg/Odometry` (自己位置) |
+| sub | `odom_topic` (例 `/state_estimator/odom`) | `nav_msgs/msg/Odometry` (自己位置) |
 | srv | `~/start/<名前>`, `~/start` | `std_srvs/srv/Trigger` (その経路の始点から走り出す。`~/start` は最初の経路) |
 | srv | `~/stop` | `std_srvs/srv/Trigger` |
 | action | `~/follow` | `path_follower/action/FollowPath` (下の「アクション」) |

@@ -55,9 +55,6 @@ target_link_libraries(robot_sim
 install(TARGETS robot_sim
 	DESTINATION lib/${PROJECT_NAME}
 )
-install(DIRECTORY config
-	DESTINATION share/${PROJECT_NAME}
-)
 
 if(BUILD_TESTING)
 	add_executable(oumuamua_sim_plant_test test/plant_test.cpp)

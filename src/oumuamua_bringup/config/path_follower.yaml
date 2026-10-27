@@ -1,14 +1,24 @@
-# path_follower の上書き。path_follower の config/path_follower.yaml の後に読む。
-# 経路ファイルの場所 (path_dir = config/paths) と自己位置のトピック (odom_topic) は bringup.launch.py が決める。
+# path_follower のパラメータ。path_follower は既定値を持たないので、全部ここに書く。どれも起動時にだけ読む。
+# 経路ファイルの場所 (path_dir) と自己位置のトピック (odom_topic) は bringup.launch.py が上書きする
+# (path_dir は path_dir 引数 = config/paths、odom_topic は estimator 引数で決まる)。
 path_follower:
   ros__parameters:
-    # config/paths の下の経路。~/start/<名前> で走り出す (~/start は最初の経路)
+    # 経路ファイル (CSV: x, y, yaw。フィールド座標系)。make_path.py で作る。
+    # path_dir の下の <名前>.csv を paths に並べる。経路ごとに ~/start/<名前> ができ、~/start は最初の経路。
+    # 経路が 1 つだけなら path_file にファイルを書いてもよい (名前はファイル名から)
+    path_dir: ""
     #   start_to_shelf / shelf_to_start: 壁の隙間の中央を通る。機体は進む向きを向く (帰りは後ろ向き)
     #   fast_start_to_shelf / fast_shelf_to_start: 速さ優先のジグザグ。機体はほぼ +x 向き (狭い区間だけ進む向き)。壁に 6 cm まで寄る
     #   slalom_forward / slalom_backward: task_commander がスラロームの往復に使う (~/follow で名前を指定)
     paths: [start_to_shelf, shelf_to_start, fast_start_to_shelf, fast_shelf_to_start, slalom_forward, slalom_backward]
+    path_file: ""
+    reference_topic: /tracker_node/reference   # 追従ノードへの目標 (holonomic_tracker/msg/TrackingReference)
+    odom_topic: /state_estimator/odom          # 自己位置 (始点の確認と、機体の遅れを見るのに使う)
+    frame_id: field
+    rate: 50.0                                 # [Hz] 目標を出す周期
 
-    # 速度計画の上限。下の層ほど緩くしてある (計画 < 追従 < 足回り)。ここが機体の出せる範囲を超えると、
+    # 速度計画の上限。この範囲でできるだけ速く走り、両端で止まる。
+    # 下の層ほど緩くしてある (計画 < 追従 < 足回り)。ここが機体の出せる範囲を超えると、
     # 目標が先に行ってしまい、追いつくのを待って止まったり動いたりするので、かえって遅くなる。
     #   計画 (ここ)         2.0 m/s, 2.5 m/s^2, 2.5 rad/s
     #   追従 (tracker_node) 2.5 m/s, 4.0 m/s^2, 4.0 rad/s   ずれを戻すぶんの余裕
@@ -18,11 +28,23 @@ path_follower:
     # 足回りが指令に約 0.18 s 遅れて付いてくるぶん、速いほど曲がり角を内側へ切る。上げるときは走行を記録して壁との間隔を見ること
     limits:
       max_speed: 2.0           # [m/s]
-      max_accel: 2.5           # [m/s^2]
-      max_lateral_accel: 1.5   # [m/s^2] 半径 0.30 m の角を 0.67 m/s で回る
+      max_accel: 2.5           # [m/s^2] 進む向きの加減速
+      max_lateral_accel: 1.5   # [m/s^2] 曲がるときの横加速度。半径 0.30 m の角を 0.67 m/s で回る
       max_yaw_rate: 2.5        # [rad/s] 半径 0.30 m の角で 0.75 m/s (機体が進む向きを向く経路のとき)
 
-    # 機体が目標からこれより遅れたら、追いつくまで目標を進めない [m]。
+    # ~/start のとき、機体が経路の始点からこれより離れていたら始めない [m]。0 以下で確認しない
+    start_tolerance: 0.15
+    # 機体が目標からこれより遅れたら、追いつくまで目標を進めない [m]。0 以下で待たない。
     # 足回りが指令に約 0.18 s 遅れるので、普通に走っていても「速さ x 0.18 s」だけ遅れる (1.4 m/s で 0.25 m)。
     # これより小さいと、速い所で毎回待ちが入って止まったり動いたりする
     max_tracking_error: 0.3
+    odom_timeout: 0.5          # [s] 自己位置がこれより古ければ「無い」とみなす
+    hold_at_goal: true         # 終点に着いた後も終点を出し続けて、そこに留まる
+    spacing: 0.01              # [m] ~/follow で経由点をつなぐときの点の間隔
+    # ~/follow の成功の条件: 目標が終点に着いた後、自己位置が終点から goal_tolerance [m]・goal_yaw_tolerance [rad]
+    # 以内に goal_settle_time [s] 留まる。目標が終点に着いてから goal_timeout [s] 経っても留まらなければ失敗
+    goal_tolerance: 0.03
+    goal_yaw_tolerance: 0.05
+    goal_settle_time: 0.2
+    goal_timeout: 3.0
+    auto_start: false          # true なら ~/start を待たずに走り出す (始点の確認はしない)

@@ -59,33 +59,33 @@ namespace {
 	class GripperNode final : public rclcpp::Node {
 	public:
 		GripperNode() : rclcpp::Node("gripper") {
-			const double rate = this->declare_parameter<double>("control_rate", 50.0);
+			const double rate = this->declare_parameter<double>("control_rate");
 			this->dt_ = 1.0 / rate;
 
 			// --- 昇降 ---
-			this->motor_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.motor", 1));
+			this->motor_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.motor"));
 			if (this->motor_ < 1 || this->motor_ > 8) {
 				throw std::invalid_argument("lift.motor must be 1..8");
 			}
-			this->c620_ = this->declare_parameter<bool>("lift.c620", false);
-			this->vel_kp_ = this->declare_parameter<double>("lift.vel_kp", 0.15);
-			this->vel_ki_ = this->declare_parameter<double>("lift.vel_ki", 9.0);
-			this->pos_kp_ = this->declare_parameter<double>("lift.pos_kp", 0.5);
-			this->temperature_limit_ = static_cast<std::uint8_t>(this->declare_parameter<std::int64_t>("lift.temperature_limit", 50));
-			this->target_scale_ = this->declare_parameter<double>("lift.target_scale", 1.0);
-			this->target_offset_ = this->declare_parameter<double>("lift.target_offset", 0.0);
-			this->gear_ratio_ = this->declare_parameter<double>("lift.gear_ratio", 36.0);
-			this->meters_per_output_revolution_ = this->declare_parameter<double>("lift.meters_per_output_revolution", 0.0);
-			this->min_height_ = this->declare_parameter<double>("lift.min_height", 0.0);
-			this->max_height_ = this->declare_parameter<double>("lift.max_height", 0.3);
-			this->max_speed_ = this->declare_parameter<double>("lift.max_speed", 0.2);
-			this->tolerance_ = this->declare_parameter<double>("lift.tolerance", 0.005);
-			this->settle_time_ = this->declare_parameter<double>("lift.settle_time", 0.2);
-			this->timeout_margin_ = this->declare_parameter<double>("lift.timeout_margin", 2.0);
-			this->feedback_timeout_ = this->declare_parameter<double>("lift.feedback_timeout", 0.2);
-			this->config_repeat_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.config_repeat", 3));
-			this->positions_ = this->declare_parameter<std::vector<double>>("lift.positions", std::vector<double>{});
-			this->position_names_ = this->declare_parameter<std::vector<std::string>>("lift.position_names", std::vector<std::string>{});
+			this->c620_ = this->declare_parameter<bool>("lift.c620");
+			this->vel_kp_ = this->declare_parameter<double>("lift.vel_kp");
+			this->vel_ki_ = this->declare_parameter<double>("lift.vel_ki");
+			this->pos_kp_ = this->declare_parameter<double>("lift.pos_kp");
+			this->temperature_limit_ = static_cast<std::uint8_t>(this->declare_parameter<std::int64_t>("lift.temperature_limit"));
+			this->target_scale_ = this->declare_parameter<double>("lift.target_scale");
+			this->target_offset_ = this->declare_parameter<double>("lift.target_offset");
+			this->gear_ratio_ = this->declare_parameter<double>("lift.gear_ratio");
+			this->meters_per_output_revolution_ = this->declare_parameter<double>("lift.meters_per_output_revolution");
+			this->min_height_ = this->declare_parameter<double>("lift.min_height");
+			this->max_height_ = this->declare_parameter<double>("lift.max_height");
+			this->max_speed_ = this->declare_parameter<double>("lift.max_speed");
+			this->tolerance_ = this->declare_parameter<double>("lift.tolerance");
+			this->settle_time_ = this->declare_parameter<double>("lift.settle_time");
+			this->timeout_margin_ = this->declare_parameter<double>("lift.timeout_margin");
+			this->feedback_timeout_ = this->declare_parameter<double>("lift.feedback_timeout");
+			this->config_repeat_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.config_repeat"));
+			this->positions_ = this->declare_parameter<std::vector<double>>("lift.positions");
+			this->position_names_ = this->declare_parameter<std::vector<std::string>>("lift.position_names");
 			if (!this->position_names_.empty() && this->position_names_.size() != this->positions_.size()) {
 				throw std::invalid_argument("lift.position_names must be empty or as long as lift.positions");
 			}
@@ -94,22 +94,22 @@ namespace {
 					throw std::invalid_argument("lift.positions must be within lift.min_height..lift.max_height");
 				}
 			}
-			const bool enable_on_start = this->declare_parameter<bool>("lift.enable_on_start", true);
+			const bool enable_on_start = this->declare_parameter<bool>("lift.enable_on_start");
 
 			// --- 吸引 ---
-			this->suction_current_ = this->declare_parameter<double>("suction.current", 0.0);
-			const auto suction_topic = this->declare_parameter<std::string>("suction.target_topic", "");
+			this->suction_current_ = this->declare_parameter<double>("suction.current");
+			const auto suction_topic = this->declare_parameter<std::string>("suction.target_topic");
 			if (suction_topic.empty()) {
 				throw std::invalid_argument("suction.target_topic must be set (mini_shirasu_node's ~/target_current)");
 			}
 
 			// --- 通信 ---
-			const auto frame_topic = this->declare_parameter<std::string>("robomas_frame_topic", "/robomas_frame");
-			auto target_topic = this->declare_parameter<std::string>("robomas_target_topic", "");
+			const auto frame_topic = this->declare_parameter<std::string>("robomas_frame_topic");
+			auto target_topic = this->declare_parameter<std::string>("robomas_target_topic");
 			if (target_topic.empty()) {
 				target_topic = "/robomas_target" + std::to_string(this->motor_);
 			}
-			const auto can_rx_topic = this->declare_parameter<std::string>("can_rx_topic", "/robomas_can_rx");
+			const auto can_rx_topic = this->declare_parameter<std::string>("can_rx_topic");
 
 			this->frame_pub_ = this->create_publisher<robomas_plugins::msg::RobomasFrame>(frame_topic, rclcpp::QoS{10});
 			this->target_pub_ = this->create_publisher<robomas_plugins::msg::RobomasTarget>(target_topic, rclcpp::QoS{10});
@@ -497,7 +497,14 @@ namespace {
 
 auto main(int argc, char** argv) -> int {
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<GripperNode>());
+	try {
+		rclcpp::spin(std::make_shared<GripperNode>());
+	} catch (const std::exception& e) {
+		// パラメータが足りないときなど (既定値は持たないので、全部パラメータファイルで与える)
+		RCLCPP_FATAL(rclcpp::get_logger("gripper"), "%s", e.what());
+		rclcpp::shutdown();
+		return 1;
+	}
 	rclcpp::shutdown();
 	return 0;
 }

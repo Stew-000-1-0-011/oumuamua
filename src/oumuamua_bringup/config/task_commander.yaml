@@ -1,4 +1,5 @@
 # task_commander のパラメータ。座標はフィールド座標系 (原点はフィールド中心、+x がスタート -> ビンゴ、+y が左。自チームは +y 側)。
+# task_commander は既定値を持たないので、全部ここに書く。odom_topic は bringup.launch.py が estimator 引数で上書きする。
 # 寸法はルール (千葉大学ロボットコンテスト 2026) と、sotoba_ros のフィールド (objects.cpp) に合わせてある。
 #
 # !!! 実機に合わせて決めること !!!

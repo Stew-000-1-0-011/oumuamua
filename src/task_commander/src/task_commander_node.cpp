@@ -83,62 +83,62 @@ namespace {
 			this->group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
 			// --- フィールドと機体 ---
-			const auto bounds = this->declare_parameter<std::vector<double>>("field.bounds", {-2.786, -1.655, 2.786, 1.655});
-			const auto walls = task_commander::boxes_from_flat(this->declare_parameter<std::vector<double>>("field.obstacles", std::vector<double>{}), "field.obstacles");
+			const auto bounds = this->declare_parameter<std::vector<double>>("field.bounds");
+			const auto walls = task_commander::boxes_from_flat(this->declare_parameter<std::vector<double>>("field.obstacles"), "field.obstacles");
 			if (bounds.size() != 4) {
 				throw std::invalid_argument("field.bounds must be [xmin, ymin, xmax, ymax]");
 			}
 			this->field_.bounds = Box{bounds[0], bounds[1], bounds[2], bounds[3]};
 			this->walls_ = walls;
-			this->robot_radius_ = this->declare_parameter<double>("robot_radius", 0.32);
-			this->min_clearance_ = this->declare_parameter<double>("min_clearance", 0.02);
+			this->robot_radius_ = this->declare_parameter<double>("robot_radius");
+			this->min_clearance_ = this->declare_parameter<double>("min_clearance");
 
 			// --- 場所 ---
-			this->start_pose_ = pose_from(this->declare_parameter<std::vector<double>>("start_pose", {-2.2, 1.3, 0.0}), "start_pose");
-			this->slalom_entrance_ = pose_from(this->declare_parameter<std::vector<double>>("slalom.entrance", {-2.05, 0.668, 0.0}), "slalom.entrance");
-			this->slalom_exit_ = pose_from(this->declare_parameter<std::vector<double>>("slalom.exit", {1.25, 1.273, 0.0}), "slalom.exit");
-			this->forward_route_ = this->declare_parameter<std::string>("slalom.forward_route", "slalom_forward");
-			this->backward_route_ = this->declare_parameter<std::string>("slalom.backward_route", "slalom_backward");
+			this->start_pose_ = pose_from(this->declare_parameter<std::vector<double>>("start_pose"), "start_pose");
+			this->slalom_entrance_ = pose_from(this->declare_parameter<std::vector<double>>("slalom.entrance"), "slalom.entrance");
+			this->slalom_exit_ = pose_from(this->declare_parameter<std::vector<double>>("slalom.exit"), "slalom.exit");
+			this->forward_route_ = this->declare_parameter<std::string>("slalom.forward_route");
+			this->backward_route_ = this->declare_parameter<std::string>("slalom.backward_route");
 
 			// ノーツ (ブロック) は床に置かれた立方体。中心の x を並べる
-			this->blocks_x_ = this->declare_parameter<std::vector<double>>("notes.x", {-2.699, -2.499, -2.299, -2.099, -1.899, -1.699});
-			this->blocks_y_ = this->declare_parameter<double>("notes.y", 0.125);
-			this->block_size_ = this->declare_parameter<double>("notes.size", 0.15);
+			this->blocks_x_ = this->declare_parameter<std::vector<double>>("notes.x");
+			this->blocks_y_ = this->declare_parameter<double>("notes.y");
+			this->block_size_ = this->declare_parameter<double>("notes.size");
 			this->picked_.assign(this->blocks_x_.size(), false);
-			this->pick_yaw_ = this->declare_parameter<double>("pick.yaw", std::numbers::pi / 2);
-			this->pick_standoff_ = this->declare_parameter<double>("pick.standoff", 0.15);
-			this->grip_time_ = this->declare_parameter<double>("pick.grip_time", 0.5);
+			this->pick_yaw_ = this->declare_parameter<double>("pick.yaw");
+			this->pick_standoff_ = this->declare_parameter<double>("pick.standoff");
+			this->grip_time_ = this->declare_parameter<double>("pick.grip_time");
 
 			// 棚 (ビンゴ): 列の中心の x、自チーム側の面の y、ブロックの中心を面からどれだけ奥に置くか
-			this->columns_x_ = this->declare_parameter<std::vector<double>>("shelf.columns_x", {1.7225, 2.0325, 2.3425});
-			this->rows_ = static_cast<int>(this->declare_parameter<std::int64_t>("shelf.rows", 3));
-			this->shelf_face_y_ = this->declare_parameter<double>("shelf.face_y", 0.30);
-			this->place_depth_ = this->declare_parameter<double>("shelf.place_depth", 0.085);
-			this->place_yaw_ = this->declare_parameter<double>("place.yaw", std::numbers::pi / 2);
-			this->place_standoff_ = this->declare_parameter<double>("place.standoff", 0.15);
-			this->release_time_ = this->declare_parameter<double>("place.release_time", 0.5);
+			this->columns_x_ = this->declare_parameter<std::vector<double>>("shelf.columns_x");
+			this->rows_ = static_cast<int>(this->declare_parameter<std::int64_t>("shelf.rows"));
+			this->shelf_face_y_ = this->declare_parameter<double>("shelf.face_y");
+			this->place_depth_ = this->declare_parameter<double>("shelf.place_depth");
+			this->place_yaw_ = this->declare_parameter<double>("place.yaw");
+			this->place_standoff_ = this->declare_parameter<double>("place.standoff");
+			this->release_time_ = this->declare_parameter<double>("place.release_time");
 			this->filled_.assign(this->columns_x_.size() * static_cast<std::size_t>(std::max(this->rows_, 0)), false);
 
 			// 昇降の高さは gripper.yaml の lift.positions の番号で指す
-			this->lift_pick_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.pick", 0));
-			this->lift_clear_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.clear", 1));
-			this->lift_carry_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.carry", 2));
+			this->lift_pick_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.pick"));
+			this->lift_clear_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.clear"));
+			this->lift_carry_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.carry"));
 			const auto to_ints = [](const std::vector<std::int64_t>& v) { return std::vector<int>(v.begin(), v.end()); };
-			this->lift_row_approach_ = to_ints(this->declare_parameter<std::vector<std::int64_t>>("lift.row_approach", {3, 5, 7}));
-			this->lift_row_release_ = to_ints(this->declare_parameter<std::vector<std::int64_t>>("lift.row_release", {4, 6, 8}));
+			this->lift_row_approach_ = to_ints(this->declare_parameter<std::vector<std::int64_t>>("lift.row_approach"));
+			this->lift_row_release_ = to_ints(this->declare_parameter<std::vector<std::int64_t>>("lift.row_release"));
 			if (std::ssize(this->lift_row_approach_) != this->rows_ || std::ssize(this->lift_row_release_) != this->rows_) {
 				throw std::invalid_argument("lift.row_approach and lift.row_release need one index per shelf row");
 			}
-			this->lift_timeout_ = this->declare_parameter<double>("lift.timeout", 10.0);
+			this->lift_timeout_ = this->declare_parameter<double>("lift.timeout");
 
 			// 速さ: 寄るときと下がるとき (最後の一区間) は approach_speed
-			this->travel_speed_ = this->declare_parameter<double>("travel_speed", 0.0);
-			this->approach_speed_ = this->declare_parameter<double>("approach_speed", 0.3);
-			this->sweep_step_ = this->declare_parameter<double>("sweep_step", 0.02);
+			this->travel_speed_ = this->declare_parameter<double>("travel_speed");
+			this->approach_speed_ = this->declare_parameter<double>("approach_speed");
+			this->sweep_step_ = this->declare_parameter<double>("sweep_step");
 
 			// --- 把持機構 ---
-			const auto names = this->declare_parameter<std::vector<std::string>>("grippers.names", {"gripper0", "gripper1"});
-			const auto offsets = this->declare_parameter<std::vector<double>>("grippers.offsets", {-0.45, 0.12, -0.45, -0.12});
+			const auto names = this->declare_parameter<std::vector<std::string>>("grippers.names");
+			const auto offsets = this->declare_parameter<std::vector<double>>("grippers.offsets");
 			if (offsets.size() != 2 * names.size()) {
 				throw std::invalid_argument("grippers.offsets must be [x0, y0, x1, y1, ...] (two numbers per gripper)");
 			}
@@ -163,8 +163,8 @@ namespace {
 			}
 
 			// --- 通信 ---
-			const auto odom_topic = this->declare_parameter<std::string>("odom_topic", "/state_estimator/odom");
-			const auto follow_action = this->declare_parameter<std::string>("follow_action", "/path_follower/follow");
+			const auto odom_topic = this->declare_parameter<std::string>("odom_topic");
+			const auto follow_action = this->declare_parameter<std::string>("follow_action");
 			rclcpp::SubscriptionOptions options{};
 			options.callback_group = this->group_;
 			this->odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
@@ -626,7 +626,7 @@ auto main(int argc, char** argv) -> int {
 		auto node = std::make_shared<TaskCommanderNode>();
 		executor.add_node(node);
 		executor.spin();
-	} catch (const std::invalid_argument& e) {
+	} catch (const std::exception& e) {
 		RCLCPP_FATAL(rclcpp::get_logger("task_commander"), "%s", e.what());
 		rclcpp::shutdown();
 		return 1;

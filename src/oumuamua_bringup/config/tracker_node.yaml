@@ -1,13 +1,42 @@
-# tracker_node の上書き。holonomic_tracker の config/tracker_node.yaml の後に読む。
-# pose_source は bringup.launch.py が estimator 引数で決める
-# (true: state_estimator の ~/odom、false: sotoba の TF)。
+# tracker_node (holonomic_tracker) のパラメータ。tracker_node は既定値を持たないので、全部ここに書く。
+# 「起動時のみ」以外は ros2 param set で実行中に変えられる (ゲイン調整用)。
 tracker_node:
   ros__parameters:
-    field_frame: field
-    base_frame: base_link
+    # --- 起動時のみ ---
+    field_frame: field          # 目標・自己位置の座標系
+    base_frame: base_link       # 追従させる機体のフレーム (TFの子)
+    # tf: field_frame -> base_frame を引く / topic: pose_topic (PoseStamped)
+    # odom: odom_topic (Odometry) の外部の状態推定 (姿勢と速度) をそのまま使い、内蔵のオブザーバは使わない
+    # bringup.launch.py が estimator 引数で上書きする (true: odom (state_estimator の ~/odom)、false: tf (sotoba の TF))
+    pose_source: odom
+    pose_topic: pose
     odom_topic: /state_estimator/odom
     cmd_vel_topic: /cmd_vel
     cmd_vel_stamped: true       # state_estimator の速度入力に cmd_vel をつなぐこともあるので時刻付き
+    control_rate: 50.0          # [Hz]
+
+    # --- タイムアウトと遅れ ---
+    reference_timeout: 0.2      # [s] 目標がこれより来なければ止める
+    pose_timeout: 0.3           # [s] 自己位置がこれより古ければ止める
+    max_reference_extrapolation: 0.2  # [s] 目標をその時刻から今まで速度FFで外挿する上限
+    cmd_delay: 0.0              # [s] cmd_vel を出してから機体に効き始めるまで (オブザーバ用)
+
+    # --- フィードバック (フィールド座標系、軸ごと) ---
+    #   u = v_ff + kp*e + ki*∫e + kd*(v_ff - v_hat)
+    gains:
+      linear:
+        kp: 3.0                 # [1/s]
+        ki: 0.0                 # [1/s^2]
+        kd: 0.3                 # [-] 速度誤差 (オブザーバの推定速度) に対するゲイン
+        integral_limit: 0.1     # [m*s]
+      angular:
+        kp: 4.0
+        ki: 0.0
+        kd: 0.3
+        integral_limit: 0.1     # [rad*s]
+    heading_lookahead: 0.01     # [s] 機体座標系へ回すときの yaw の先読み (制御周期の半分くらい)
+
+    # --- 制限 (<= 0 で無効) ---
     # 追従の上限。path_follower の計画 (2.0 m/s, 2.5 m/s^2, 2.5 rad/s) より、ずれを戻すぶんだけ緩く、
     # 足回り (車輪 120 rad/s = 3.5 m/s。並進と旋回で分け合う: 2.5 + 4.0 * 0.2 = 3.3 m/s) には収まるようにしてある
     limits:
@@ -15,3 +44,27 @@ tracker_node:
       max_velocity_angular: 4.0  # [rad/s]
       max_accel_linear: 4.0      # [m/s^2]
       max_accel_angular: 15.0    # [rad/s^2]
+
+    # --- pose_source: odom のとき ---
+    # 外部の推定がこれより飛んだら (推定のやり直しなど) 制御器の積分を捨てる
+    odom:
+      jump_distance: 0.1        # [m]
+      jump_yaw: 0.2             # [rad]
+
+    # --- オブザーバ (機体速度の推定。pose_source が tf / topic のとき) ---
+    observer:
+      tau_linear: 0.1           # [s] 下位速度制御の時定数。<= 0 で指令を使わない等速モデル
+      tau_angular: 0.1
+      accel_noise_linear: 1.0   # 大きいほど観測に素早く追従し、推定速度がうるさくなる
+      accel_noise_angular: 2.0
+      disturbance_noise_linear: 0.05   # 外乱速度 (滑りなど) の変化の速さ。0 で一定の外乱とみなす
+      disturbance_noise_angular: 0.1
+      sigma_position: 0.01      # [m]   自己位置の観測ノイズ
+      sigma_yaw: 0.01           # [rad]
+      initial_sigma_velocity_linear: 0.5
+      initial_sigma_velocity_angular: 1.0
+      initial_sigma_disturbance_linear: 0.1
+      initial_sigma_disturbance_angular: 0.2
+      gate_sigma: 0.0           # 自己位置の飛びを棄却する閾値 [sigma]。0 で無効
+      reset_after_rejects: 5    # 連続してこの回数を超えて棄却したら初期化し直す
+      max_gap: 1.0              # [s] 自己位置がこれ以上途切れたら初期化し直す

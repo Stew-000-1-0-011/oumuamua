@@ -60,9 +60,6 @@ target_link_libraries(state_estimator_node
 install(TARGETS state_estimator_node
 	DESTINATION lib/${PROJECT_NAME}
 )
-install(DIRECTORY config
-	DESTINATION share/${PROJECT_NAME}
-)
 
 if(BUILD_TESTING)
 	add_executable(state_estimator_test test/estimator_test.cpp)

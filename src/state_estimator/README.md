@@ -17,24 +17,26 @@ sotoba_node と対になって動く。
 | `include/state_estimator/filter.hpp`, `src/filter.cpp` | 拡張カルマンフィルタ (遅れて届く観測をその時刻で入れる)。ROS非依存 |
 | `include/state_estimator/belief_geometry.hpp`, `src/belief_geometry.cpp` | 機体の姿勢と sotoba の信念の相互変換、事前の差し引き。ROS非依存 |
 | `src/state_estimator_node.cpp` | ノード本体 |
-| `config/state_estimator.yaml` | パラメータ |
 | `test/estimator_test.cpp` | フィルタと変換のテスト (ROS不要) |
+
+
+**パラメータに既定値は無い。** 全部パラメータファイルで与える (足りなければ起動時にエラーで止まる)。この機体の値と各項目の説明は oumuamua の `src/oumuamua_bringup/config/state_estimator.yaml` にある。
 
 ## トピック
 
 | 方向 | トピック | 型 |
 | --- | --- | --- |
 | sub | `~/body_velocity` | `geometry_msgs/msg/TwistStamped` (機体座標系。remap してつなぐ) |
-| sub | `posterior_topic` (既定 `/sotoba_node/posterior_beliefs`) | `sotoba_ros/msg/BeliefArray` |
-| sub | `initial_topic` (既定 `/sotoba_node/initial_beliefs`) | `sotoba_ros/msg/BeliefArray` (transient local。初期化と物体の位置関係に使う) |
+| sub | `posterior_topic` (例 `/sotoba_node/posterior_beliefs`) | `sotoba_ros/msg/BeliefArray` |
+| sub | `initial_topic` (例 `/sotoba_node/initial_beliefs`) | `sotoba_ros/msg/BeliefArray` (transient local。初期化と物体の位置関係に使う) |
 | sub | `/initialpose` | `geometry_msgs/msg/PoseWithCovarianceStamped` (RViz の 2D Pose Estimate。その姿勢でやり直す) |
 | sub | TF `base_frame -> lidar_frame` | LiDAR の取付 |
 | pub | `~/odom` | `nav_msgs/msg/Odometry` (姿勢はフィールド座標系、速度は機体座標系) |
 | pub | TF `field_frame -> base_frame` | |
-| pub | `prior_topic` (既定 `/sotoba_node/prior_beliefs`) | `sotoba_ros/msg/BeliefArray` |
+| pub | `prior_topic` (例 `/sotoba_node/prior_beliefs`) | `sotoba_ros/msg/BeliefArray` |
 | srv | `~/reset` | `std_srvs/srv/Trigger` (sotoba の定義上の初期姿勢でやり直す) |
 
-`~/odom`・TF・事前は `publish_rate` (既定 100 Hz) で出す。sotoba_node は事前を溜めておき、
+`~/odom`・TF・事前は `publish_rate` (例 100 Hz) で出す。sotoba_node は事前を溜めておき、
 スキャン時刻以前で最新のものを使う。
 
 ## 状態と計算

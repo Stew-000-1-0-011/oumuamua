@@ -67,9 +67,6 @@ install(TARGETS path_follower_node
 install(PROGRAMS scripts/make_path.py
 	DESTINATION lib/${PROJECT_NAME}
 )
-install(DIRECTORY config
-	DESTINATION share/${PROJECT_NAME}
-)
 
 if(BUILD_TESTING)
 	add_executable(path_follower_test test/trajectory_test.cpp)

@@ -74,15 +74,13 @@ namespace {
 	public:
 		RobotSim() : rclcpp::Node("robot_sim") {
 			// --- フィールド (sotoba_node と同じ名前・意味) ---
-			const sotoba_ros::ObjectsConfig defaults{};
 			sotoba_ros::ObjectsConfig field{};
 			field.wall_height = static_cast<float>(
-				this->declare_parameter<double>("wall_height", static_cast<double>(defaults.wall_height))
+				this->declare_parameter<double>("wall_height")
 			);
 			field.wall_thickness = static_cast<float>(this->declare_parameter<double>(
-				"wall_thickness", static_cast<double>(defaults.wall_thickness)
-			));
-			field.include_notes = this->declare_parameter<bool>("include_notes", defaults.include_notes);
+				"wall_thickness"));
+			field.include_notes = this->declare_parameter<bool>("include_notes");
 			// make_objects は「LiDAR 座標系での姿勢」を返すので、原点・高さ 0・正立の LiDAR を指定して
 			// フィールド座標系での姿勢を得る
 			field.start_x = 0.f;
@@ -103,21 +101,21 @@ namespace {
 			this->add_environment();
 
 			// --- 機体の傾き (振動) ---
-			this->declare_parameter<double>("tilt.static_roll", 0.0);
-			this->declare_parameter<double>("tilt.static_pitch", 0.0);
-			this->declare_parameter<double>("tilt.amplitude", 0.0);
-			this->declare_parameter<double>("tilt.amplitude_per_speed", 0.0);
-			this->declare_parameter<double>("tilt.frequency", 8.0);
-			this->declare_parameter<double>("tilt.random_stddev", 0.0);
+			this->declare_parameter<double>("tilt.static_roll");
+			this->declare_parameter<double>("tilt.static_pitch");
+			this->declare_parameter<double>("tilt.amplitude");
+			this->declare_parameter<double>("tilt.amplitude_per_speed");
+			this->declare_parameter<double>("tilt.frequency");
+			this->declare_parameter<double>("tilt.random_stddev");
 
 			// --- LiDAR の取付 (base_link -> laser) ---
 			const double lidar_height =
-				this->declare_parameter<double>("lidar_height", static_cast<double>(defaults.lidar_height));
+				this->declare_parameter<double>("lidar_height");
 			const bool lidar_upside_down =
-				this->declare_parameter<bool>("lidar_upside_down", defaults.lidar_upside_down);
-			const double lidar_x = this->declare_parameter<double>("lidar_x", 0.0);
-			const double lidar_y = this->declare_parameter<double>("lidar_y", 0.0);
-			const double lidar_yaw = this->declare_parameter<double>("lidar_yaw", 0.0);
+				this->declare_parameter<bool>("lidar_upside_down");
+			const double lidar_x = this->declare_parameter<double>("lidar_x");
+			const double lidar_y = this->declare_parameter<double>("lidar_y");
+			const double lidar_yaw = this->declare_parameter<double>("lidar_yaw");
 			this->base_to_lidar_ =
 				math::trans(Vec3{static_cast<float>(lidar_x), static_cast<float>(lidar_y), static_cast<float>(lidar_height)})
 				* yaw_rotation(lidar_yaw);
@@ -127,60 +125,60 @@ namespace {
 
 			// --- 初期姿勢 ---
 			// start_* は LiDAR の姿勢 (sotoba と同じ)。機体の姿勢へ直してから、真値のずれを足す
-			const double start_x = this->declare_parameter<double>("start_x", static_cast<double>(defaults.start_x));
-			const double start_y = this->declare_parameter<double>("start_y", static_cast<double>(defaults.start_y));
+			const double start_x = this->declare_parameter<double>("start_x");
+			const double start_y = this->declare_parameter<double>("start_y");
 			const double start_yaw =
-				this->declare_parameter<double>("start_yaw", static_cast<double>(defaults.start_yaw));
+				this->declare_parameter<double>("start_yaw");
 			const double base_yaw = start_yaw - lidar_yaw;
 			this->initial_ = Pose2{
 				.x = start_x - (std::cos(base_yaw) * lidar_x - std::sin(base_yaw) * lidar_y)
-					+ this->declare_parameter<double>("start_offset_x", 0.02),
+					+ this->declare_parameter<double>("start_offset_x"),
 				.y = start_y - (std::sin(base_yaw) * lidar_x + std::cos(base_yaw) * lidar_y)
-					+ this->declare_parameter<double>("start_offset_y", -0.01),
-				.yaw = base_yaw + this->declare_parameter<double>("start_offset_yaw", 0.01),
+					+ this->declare_parameter<double>("start_offset_y"),
+				.yaw = base_yaw + this->declare_parameter<double>("start_offset_yaw"),
 			};
 
 			// --- 運動 ---
-			const double rate = this->declare_parameter<double>("sim_rate", 200.0);
-			this->declare_parameter<double>("cmd_timeout", 0.2);
-			this->declare_parameter<double>("plant.tau_linear", 0.1);
-			this->declare_parameter<double>("plant.tau_angular", 0.1);
-			this->declare_parameter<double>("plant.max_accel_linear", 0.0);
-			this->declare_parameter<double>("plant.max_accel_angular", 0.0);
-			this->declare_parameter<double>("plant.velocity_scale_linear", 1.0);
-			this->declare_parameter<double>("plant.velocity_scale_angular", 1.0);
+			const double rate = this->declare_parameter<double>("sim_rate");
+			this->declare_parameter<double>("cmd_timeout");
+			this->declare_parameter<double>("plant.tau_linear");
+			this->declare_parameter<double>("plant.tau_angular");
+			this->declare_parameter<double>("plant.max_accel_linear");
+			this->declare_parameter<double>("plant.max_accel_angular");
+			this->declare_parameter<double>("plant.velocity_scale_linear");
+			this->declare_parameter<double>("plant.velocity_scale_angular");
 			this->plant_.emplace(this->read_plant_params(), this->initial_);
 
 			// --- スキャン ---
-			this->frame_id_ = this->declare_parameter<std::string>("frame_id", "laser");
+			this->frame_id_ = this->declare_parameter<std::string>("frame_id");
 			this->ray_num_ = static_cast<std::size_t>(
-				std::max<std::int64_t>(2, this->declare_parameter<std::int64_t>("ray_num", 720))
+				std::max<std::int64_t>(2, this->declare_parameter<std::int64_t>("ray_num"))
 			);
-			this->angle_min_ = static_cast<float>(this->declare_parameter<double>("angle_min", -std::numbers::pi));
-			this->angle_max_ = static_cast<float>(this->declare_parameter<double>("angle_max", std::numbers::pi));
-			this->range_min_ = static_cast<float>(this->declare_parameter<double>("range_min", 0.05));
-			this->range_max_ = static_cast<float>(this->declare_parameter<double>("range_max", 30.0));
-			this->declare_parameter<double>("range_noise_stddev", 0.005);
-			this->declare_parameter<double>("scan_latency", 0.0);
-			this->declare_parameter<double>("scan_duration", 0.0);
-			const double scan_hz = this->declare_parameter<double>("scan_hz", 20.0);
+			this->angle_min_ = static_cast<float>(this->declare_parameter<double>("angle_min"));
+			this->angle_max_ = static_cast<float>(this->declare_parameter<double>("angle_max"));
+			this->range_min_ = static_cast<float>(this->declare_parameter<double>("range_min"));
+			this->range_max_ = static_cast<float>(this->declare_parameter<double>("range_max"));
+			this->declare_parameter<double>("range_noise_stddev");
+			this->declare_parameter<double>("scan_latency");
+			this->declare_parameter<double>("scan_duration");
+			const double scan_hz = this->declare_parameter<double>("scan_hz");
 
 			// --- 真値 ---
-			this->field_frame_ = this->declare_parameter<std::string>("field_frame", "field");
-			this->truth_frame_ = this->declare_parameter<std::string>("truth_frame", "base_link_truth");
+			this->field_frame_ = this->declare_parameter<std::string>("field_frame");
+			this->truth_frame_ = this->declare_parameter<std::string>("truth_frame");
 
 			this->read_runtime_params();
 			this->param_cb_ = this->add_post_set_parameters_callback(
 				[this](const std::vector<rclcpp::Parameter>&) { this->read_runtime_params(); }
 			);
 
-			const auto cmd_topic = this->declare_parameter<std::string>("cmd_vel_topic", "/cmd_vel");
-			const bool cmd_vel_stamped = this->declare_parameter<bool>("cmd_vel_stamped", false);
-			const double body_velocity_rate = this->declare_parameter<double>("body_velocity_rate", 50.0);
-			this->declare_parameter<double>("body_velocity_noise_linear", 0.02);
-			this->declare_parameter<double>("body_velocity_noise_angular", 0.05);
+			const auto cmd_topic = this->declare_parameter<std::string>("cmd_vel_topic");
+			const bool cmd_vel_stamped = this->declare_parameter<bool>("cmd_vel_stamped");
+			const double body_velocity_rate = this->declare_parameter<double>("body_velocity_rate");
+			this->declare_parameter<double>("body_velocity_noise_linear");
+			this->declare_parameter<double>("body_velocity_noise_angular");
 			this->read_runtime_params();
-			const auto scan_topic = this->declare_parameter<std::string>("scan_topic", "/scan");
+			const auto scan_topic = this->declare_parameter<std::string>("scan_topic");
 			if (cmd_vel_stamped) {
 				this->cmd_stamped_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
 					cmd_topic, 10, [this](const geometry_msgs::msg::TwistStamped& m) { this->on_cmd(m.twist); }
@@ -227,13 +225,13 @@ namespace {
 	private:
 		/// 床・部屋の壁・部屋の中の障害物。フィールドの壁より外にあり、LiDAR が傾いたときにだけ見える
 		void add_environment() {
-			const bool floor = this->declare_parameter<bool>("environment.floor", true);
-			const double room_x = this->declare_parameter<double>("environment.room_half_x", 4.3);
-			const double room_y = this->declare_parameter<double>("environment.room_half_y", 3.2);
-			const double room_h = this->declare_parameter<double>("environment.room_height", 2.5);
-			const auto clutter = this->declare_parameter<std::int64_t>("environment.clutter_count", 8);
-			const double field_x = this->declare_parameter<double>("environment.field_half_x", 2.82);
-			const double field_y = this->declare_parameter<double>("environment.field_half_y", 1.69);
+			const bool floor = this->declare_parameter<bool>("environment.floor");
+			const double room_x = this->declare_parameter<double>("environment.room_half_x");
+			const double room_y = this->declare_parameter<double>("environment.room_half_y");
+			const double room_h = this->declare_parameter<double>("environment.room_height");
+			const auto clutter = this->declare_parameter<std::int64_t>("environment.clutter_count");
+			const double field_x = this->declare_parameter<double>("environment.field_half_x");
+			const double field_y = this->declare_parameter<double>("environment.field_half_y");
 
 			const auto id = sotoba::math::SquareMat<3>::ide();
 			if (floor) {
@@ -505,7 +503,14 @@ namespace {
 
 auto main(int argc, char** argv) -> int {
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<RobotSim>());
+	try {
+		rclcpp::spin(std::make_shared<RobotSim>());
+	} catch (const std::exception& e) {
+		// パラメータが足りないときなど (既定値は持たないので、全部パラメータファイルで与える)
+		RCLCPP_FATAL(rclcpp::get_logger("robot_sim"), "%s", e.what());
+		rclcpp::shutdown();
+		return 1;
+	}
 	rclcpp::shutdown();
 	return 0;
 }

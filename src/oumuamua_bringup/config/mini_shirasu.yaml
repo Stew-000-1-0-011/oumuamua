@@ -1,5 +1,5 @@
 # 足回りの mini-shirasu (mini_shirasu_node: wheel0..) のパラメータ。今は 3 輪オムニで wheel0..2 を使う。
-# 項目の意味は mini_shirasu_ros の README / config/mini_shirasu_node.yaml を参照。
+# mini_shirasu_node は既定値を持たないので、全部ここに書く。項目の意味は mini_shirasu_ros の README を参照。
 #
 # settings は mini-shirasu2 の bench.rs で実機 (RZ-735VA-8519、減速比 11.86) が動いた値で、
 # 速度・位置は駆動軸 (ホイール) 基準。chassis_node の gear_ratio を ±1 にしているのはこのため。

@@ -153,7 +153,6 @@ def generate_launch_description():
     #     executable='sotoba_node',
     #     name='sotoba_node',
     #     parameters=[
-    #         config('sotoba_ros', 'sotoba_node.yaml'),
     #         config('oumuamua_bringup', 'sotoba_node.yaml'),
     #         NodeParams('sotoba_node', {
     #             'lidar_height': LaunchConfiguration('lidar_z'),
@@ -170,7 +169,6 @@ def generate_launch_description():
     #     executable='persistence_predictor',
     #     name='persistence_predictor',
     #     parameters=[
-    #         config('sotoba_ros', 'sotoba_node.yaml'),
     #         config('oumuamua_bringup', 'sotoba_node.yaml'),
     #     ],
     #     remappings=[
@@ -188,7 +186,6 @@ def generate_launch_description():
     #         return []
     #     source = velocity_source.perform(context)
     #     params = [
-    #         config('state_estimator', 'state_estimator.yaml'),
     #         config('oumuamua_bringup', 'state_estimator.yaml'),
     #     ]
     #     if source == 'cmd_vel':
@@ -217,7 +214,6 @@ def generate_launch_description():
     #     executable='tracker_node',
     #     name='tracker_node',
     #     parameters=[
-    #         config('holonomic_tracker', 'tracker_node.yaml'),
     #         config('oumuamua_bringup', 'tracker_node.yaml'),
     #         NodeParams('tracker_node', {
     #             'pose_source': PythonExpression(["'odom' if '", estimator, "' == 'true' else 'tf'"]),
@@ -232,7 +228,6 @@ def generate_launch_description():
     #     executable='path_follower_node',
     #     name='path_follower',
     #     parameters=[
-    #         config('path_follower', 'path_follower.yaml'),
     #         config('oumuamua_bringup', 'path_follower.yaml'),
     #         NodeParams('path_follower', {
     #             'path_dir': LaunchConfiguration('path_dir'),
@@ -248,7 +243,7 @@ def generate_launch_description():
         package='omni_chassis',
         executable='chassis_node',
         name='chassis_node',
-        parameters=[LaunchConfiguration('chassis_params'), NodeParams('chassis_node', {'cmd_vel_stamped': True})],
+        parameters=[LaunchConfiguration('chassis_params')],
         output='screen',
         condition=real,
     )
@@ -337,11 +332,9 @@ def generate_launch_description():
         executable='robot_sim',
         name='robot_sim',
         parameters=[
-            config('sotoba_ros', 'sotoba_node.yaml'),
             config('oumuamua_bringup', 'sotoba_node.yaml'),
-            config('oumuamua_sim', 'robot_sim.yaml'),
+            config('oumuamua_bringup', 'robot_sim.yaml'),
             NodeParams('robot_sim', {
-                'cmd_vel_stamped': True,
                 'lidar_height': LaunchConfiguration('lidar_z'),
                 'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
                 'lidar_x': LaunchConfiguration('lidar_x'),

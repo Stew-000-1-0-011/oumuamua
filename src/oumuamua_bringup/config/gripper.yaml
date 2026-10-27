@@ -2,7 +2,7 @@
 # - gripper<i>: gripper_node (昇降のロボマス + 吸引のオン/オフ)
 # - suction<i>: mini_shirasu_node (吸引のモータを電流制御)
 # を立てる。suction<i> のパラメータは suction.yaml。
-# 項目の意味は gripper/config/gripper_node.yaml と mini_shirasu_ros の README を参照。
+# gripper_node は既定値を持たないので、全部ここに書く。項目の意味は gripper と mini_shirasu_ros の README を参照。
 #
 # !!! 実機に合わせて決めること !!!
 # - lift.motor / lift.c620: ロボマスの ID と ESC の種類
@@ -61,6 +61,7 @@
       # 負で吸う向きに回る (正では逆に回った)
       current: -12.0            # 実数で書く (-10 だと整数になり、ノードが起動時に落ちる)
     robomas_frame_topic: /robomas_frame
+    robomas_target_topic: ""    # 空なら /robomas_target<lift.motor>
     can_rx_topic: /robomas_can_rx
 
 # 左 (task_commander.yaml の grippers.offsets で y = +0.12)

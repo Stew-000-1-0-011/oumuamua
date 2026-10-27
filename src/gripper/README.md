@@ -19,8 +19,10 @@
 | `srv/SetLiftPosition.srv` | 決めておいた高さへ番号で動かすサービス |
 | `action/MoveLift.action` | 高さを直接指定して動かすアクション (調整用) |
 | `msg/GripperState.msg` | 状態 |
-| `config/gripper_node.yaml` | パラメータ (1 つぶん。意味はここのコメント) |
 | `test/lift_test.cpp` | `lift.cpp` のテスト (ROS不要) |
+
+
+**パラメータに既定値は無い。** 全部パラメータファイルで与える (足りなければ起動時にエラーで止まる)。この機体の値と各項目の説明は oumuamua の `src/oumuamua_bringup/config/gripper.yaml` にある。
 
 ## インターフェース
 
@@ -32,10 +34,10 @@
 | srv | `~/enable_lift` | `std_srvs/srv/SetBool` (true で位置制御、false で無効) |
 | srv | `~/zero_lift` | `std_srvs/srv/Trigger` (今の位置を高さ 0 にし直す。動いている途中なら止め、アクションのゴールは失敗で終わる) |
 | pub | `~/state` | `gripper/msg/GripperState` |
-| pub | `robomas_frame_topic` (既定 `/robomas_frame`) | `robomas_plugins/msg/RobomasFrame` (起動時・有効/無効の切り替え時・`~/zero_lift`) |
-| pub | `robomas_target_topic` (既定 `/robomas_target<lift.motor>`) | `robomas_plugins/msg/RobomasTarget` (`control_rate` で) |
+| pub | `robomas_frame_topic` (例 `/robomas_frame`) | `robomas_plugins/msg/RobomasFrame` (起動時・有効/無効の切り替え時・`~/zero_lift`) |
+| pub | `robomas_target_topic` (例 `/robomas_target<lift.motor>`) | `robomas_plugins/msg/RobomasTarget` (`control_rate` で) |
 | pub | `suction.target_topic` | `std_msgs/msg/Float64` [A] (`control_rate` で) |
-| sub | `can_rx_topic` (既定 `/robomas_can_rx`) | `robomas_plugins/msg/Frame` (ロボマスのフィードバック 0x200 + k) |
+| sub | `can_rx_topic` (例 `/robomas_can_rx`) | `robomas_plugins/msg/Frame` (ロボマスのフィードバック 0x200 + k) |
 
 使う高さ (下・中段・上段など) は `lift.positions` に並べておき (oumuamua_bringup では `config/gripper.yaml`)、
 `~/set_lift_position` で番号を送る。着いたかは `~/state` の `lift_arrived` (と `lift_position`) で見る。

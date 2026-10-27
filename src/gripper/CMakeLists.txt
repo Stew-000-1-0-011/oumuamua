@@ -64,9 +64,6 @@ target_link_libraries(gripper_node
 install(TARGETS gripper_node
 	DESTINATION lib/${PROJECT_NAME}
 )
-install(DIRECTORY config
-	DESTINATION share/${PROJECT_NAME}
-)
 
 if(BUILD_TESTING)
 	# フィードバックの読み取り・回転の数え上げ・指令の動かし方のテスト (ROS不要)

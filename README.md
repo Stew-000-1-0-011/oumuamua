@@ -92,6 +92,26 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `velocity_source` | `wheels` | state_estimator の速度入力。`wheels`: 車輪オドメトリ (`sim:=true` なら robot_sim の模擬)、`cmd_vel`: 指令値 |
 | `cmd_tau` | `0.18` | `velocity_source:=cmd_vel` のときの、指令への追従の時定数 [s] (実機の記録で 0.18 s) |
 
+**パラメータは全部 `src/oumuamua_bringup/config/` にある。** 各ノードは既定値を持たないので、ここに無い項目があると
+そのノードは起動時にエラーで止まる。パッケージ側には設定ファイルを置いていない。
+
+| ファイル | ノード |
+| --- | --- |
+| `chassis_node.yaml` | chassis_node (omni_chassis) |
+| `mini_shirasu.yaml` | wheel0..2 (mini_shirasu_node) |
+| `gripper.yaml` / `suction.yaml` | gripper0..1 (gripper_node) / suction0..1 (mini_shirasu_node) |
+| `task_commander.yaml` | task_commander |
+| `sotoba_node.yaml` | sotoba_node と persistence_predictor (sotoba_ros)。robot_sim もフィールドの寸法と初期姿勢をここから読む |
+| `state_estimator.yaml` | state_estimator |
+| `tracker_node.yaml` | tracker_node (holonomic_tracker) |
+| `path_follower.yaml` | path_follower |
+| `robot_sim.yaml` | robot_sim (oumuamua_sim、`sim:=true`) |
+| `controller_bridge.yaml` | oumuamua-controller の bridge (`ros2 launch oumuamua_controller_bridge bridge.launch.py` が読む) |
+| `urg_serial.yaml` / `urg_ether.yaml` | urg_node2 |
+
+LiDAR の取付 (`lidar_*`) や `estimator` で決まる値 (`pose_source`、`odom_topic`、`publish_tf` など) は、
+`bringup.launch.py` が launch 引数から上書きする (ファイルにも同じ既定の値を書いてある)。
+
 次は**例・仮の値のまま**なので、実機に合わせること。
 
 - `src/oumuamua_bringup/config/chassis_node.yaml`: 3 輪オムニ (機体正面 = 中心から車輪 0 の向き、
@@ -143,7 +163,7 @@ robot_sim がやること:
   `environment.*` でフィールドの外 (床・部屋の壁・人や机の代わりの箱) を模擬する。傾いた光線は壁を越えて外の物や床に当たる
 
 フィールドの寸法と初期姿勢は sotoba_node と同じパラメータファイルを読むので食い違わない。
-パラメータは `src/oumuamua_sim/config/robot_sim.yaml`。
+パラメータは `src/oumuamua_bringup/config/robot_sim.yaml`。
 
 模擬していないもの: 壁やノーツとの衝突 (すり抜ける)、車輪ごとの速度上限、モータドライバと CAN。
 

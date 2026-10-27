@@ -1,16 +1,16 @@
-# robot_sim のパラメータ。
-# フィールドの寸法 (wall_height など) と初期姿勢 (start_*)、LiDAR の高さ・向き (lidar_height,
-# lidar_upside_down) は、sotoba_node と同じパラメータファイルを先に読ませて揃える
-# (oumuamua_bringup の bringup.launch.py sim:=true がそうしている)。
+# robot_sim (oumuamua_sim、sim:=true) のパラメータ。robot_sim は既定値を持たないので、ここと sotoba_node.yaml に全部書く。
+# フィールドの寸法 (wall_height など) と初期姿勢 (start_*)、ノーツの有無 (include_notes) は、
+# sotoba_node と同じ sotoba_node.yaml を先に読ませて揃える (bringup.launch.py がそうしている)。
+# LiDAR の取付 (lidar_x / lidar_y / lidar_yaw / lidar_height / lidar_upside_down) は bringup.launch.py が launch 引数で上書きする。
 robot_sim:
   ros__parameters:
     cmd_vel_topic: /cmd_vel
-    cmd_vel_stamped: false     # true なら TwistStamped で受ける
+    cmd_vel_stamped: true      # true なら TwistStamped で受ける (tracker_node が時刻付きで出す)
     scan_topic: /scan
     sim_rate: 200.0            # [Hz] 運動の積分の周期
 
     # --- LiDAR の取付 (base_link -> laser)。高さと上下は lidar_height / lidar_upside_down ---
-    lidar_x: 0.0
+    lidar_x: 0.28
     lidar_y: 0.0
     lidar_yaw: 0.0
 
