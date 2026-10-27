@@ -367,13 +367,15 @@ def generate_launch_description():
             'lidar_connection', default_value='serial', choices=['ether', 'serial'],
             description='LiDAR の接続 (config/urg_<ether|serial>.yaml を使う)'),
         DeclareLaunchArgument(
-            'lidar_x', default_value='0.28',
-            description='base_link から見た LiDAR の位置 [m]。正面の車輪 0 (中心から 0.20 m) の 8 cm 先'),
+            'lidar_x', default_value='-0.28',
+            description='base_link から見た LiDAR の位置 [m]。LiDAR は機体の後ろ側で、車輪 0 (中心から 0.20 m 後ろ) の 8 cm 先'),
         DeclareLaunchArgument('lidar_y', default_value='0.0', description='base_link から見た LiDAR の位置 [m]'),
         DeclareLaunchArgument(
             'lidar_z', default_value='0.14',
             description='LiDAR の走査面の床からの高さ [m] (sotoba_node の lidar_height にも渡す)'),
-        DeclareLaunchArgument('lidar_yaw', default_value='0.0', description='LiDAR の向き [rad]'),
+        DeclareLaunchArgument(
+            'lidar_yaw', default_value='3.141592653589793',
+            description='LiDAR の向き [rad]。機体の後ろ (-x) を向いている'),
         DeclareLaunchArgument(
             'lidar_upside_down', default_value='true',
             description='LiDAR が上下逆さに付いているか (sotoba_node にも渡す)'),

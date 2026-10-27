@@ -2,7 +2,7 @@
 # mini_shirasu_node は既定値を持たないので、全部ここに書く。項目の意味は mini_shirasu_ros の README を参照。
 # オン/オフと電流は gripper.yaml の gripper<i> が決め、/suction<i>/target_current に送ってくる。
 # !!! can_id は各基板のファームの config.rs と合わせること。足回りが基板 0..2 (0x110..0x112) を
-#     使っているので、吸引は左が基板 4、右が基板 5 !!!
+#     使っているので、吸引は左が基板 5、右が基板 4 !!!
 
 # --- 全基板共通 ---
 /**:
@@ -43,12 +43,12 @@
       encoder_reversed: 0.0
       status_period_ms: 20.0
 
-# 左 (gripper0)
+# 左 (gripper0)。機体の前後を入れ替えた (2026-10-27) ので、以前「右」だった基板 5
 suction0:
   ros__parameters:
-    can_id: {target: 0x114, status: 0x124, command: 0x134, response: 0x144}
+    can_id: {target: 0x115, status: 0x125, command: 0x135, response: 0x145}
 
-# 右 (gripper1)
+# 右 (gripper1)。以前「左」だった基板 4
 suction1:
   ros__parameters:
-    can_id: {target: 0x115, status: 0x125, command: 0x135, response: 0x145}
+    can_id: {target: 0x114, status: 0x124, command: 0x134, response: 0x144}

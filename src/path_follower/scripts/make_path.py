@@ -20,6 +20,7 @@
       from: 1.0              # (それまでは yaw のとおり。blend [m] かけて滑らかに移る)
       blend: 0.2
       to: 2.0                # 任意。ここで yaw のとおりに戻す (無ければ終点まで進む向き)
+      offset: 3.14159265     # 任意。進む向きにこれ [rad] を足した向きにする (pi なら後ろ向きに進む)
     robot_radius: 0.28       # 任意。機体の外形を円とみなした半径。障害物との間隔の確認と図に使う
     footprint:               # 任意。機体の外形の多角形 (機体座標系、x 前・y 左)。あれば robot_radius の代わりに使う
       - [0.3, 0.1]
@@ -165,11 +166,12 @@ def main():
     yaws = [yaw_at(s, keys) for s in stations]
     follow = route.get('follow_heading')
     if follow:
-        # 進む向き (接線)。±pi で折り返さないよう、yaw のキーの値に近い側へつなげていく
+        offset = float(follow.get('offset', 0.0))
+        # 進む向き (接線) + offset。±pi で折り返さないよう、yaw のキーの値に近い側へつなげていく
         tangent = []
         for i in range(len(xy)):
             a, b = xy[max(i - 1, 0)], xy[min(i + 1, len(xy) - 1)]
-            raw = math.atan2(b[1] - a[1], b[0] - a[0])
+            raw = math.atan2(b[1] - a[1], b[0] - a[0]) + offset
             ref = tangent[-1] if tangent else yaws[0]
             tangent.append(raw + 2 * math.pi * round((ref - raw) / (2 * math.pi)))
         s0 = float(follow.get('from', 0.0))

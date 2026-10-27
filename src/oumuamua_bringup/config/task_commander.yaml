@@ -2,9 +2,9 @@
 # task_commander は既定値を持たないので、全部ここに書く。odom_topic は bringup.launch.py が estimator 引数で上書きする。
 #
 # !!! 実機に合わせて決めること !!!
-# - grippers.offsets: 機体座標系 (x 前・y 左) での、各把持機構の吸着面の中心の位置。今は「機体の後ろに 0.45 m
-#   (円の外形より 0.15 m 外) 張り出し、左右に 0.12 m ずつ」と仮定し、回収・配置では機体の後ろを壁・棚へ向ける
-#   (pick.yaw / place.yaw = +pi/2。正面の LiDAR はブロックより低いので、ブロックへ向けない)
+# - grippers.offsets: 機体座標系 (x 前・y 左) での、各把持機構の吸着面の中心の位置。今は「機体の前に 0.45 m
+#   (円の外形より 0.15 m 外) 張り出し、左右に 0.12 m ずつ (gripper0 が左)」と仮定し、回収・配置では機体の前を壁・棚へ向ける
+#   (pick.yaw / place.yaw = -pi/2。後ろの LiDAR はブロックより低いので、ブロックへ向けない)
 # - robot_radius: 機体 (把持機構を除く) を囲む円の半径
 # - 昇降の番号 (lift.*) は gripper.yaml の lift.positions の並びと合わせる
 task_commander:
@@ -13,7 +13,7 @@ task_commander:
     follow_action: /path_follower/follow
 
     # --- 機体と、動く前の間隔の確認 ---
-    robot_radius: 0.32          # [m] 半径 0.30 m の円 + 正面の LiDAR (0.315 m)
+    robot_radius: 0.32          # [m] 半径 0.30 m の円 + 後ろの LiDAR (0.315 m)
     min_clearance: 0.02         # [m] 直線で動く間、機体の円と壁・棚・残っているブロックの間にこれだけ空ける
     sweep_step: 0.02            # [m] 確認する点の間隔
     travel_speed: 0.0           # [m/s] 移動の速さの上限。0 なら path_follower の limits.max_speed
@@ -23,14 +23,14 @@ task_commander:
 
     # --- 場所 [x, y, yaw] (TO_START は field.yaml の start_pose へ) ---
     slalom:
-      entrance: [-2.05, 0.668, 0.0]     # スタートゾーン側、境界の隙間 (y = 0.2665..1.069) の手前。config/paths/slalom.route.yaml の始点
-      exit: [1.25, 1.273, 0.0]          # ゴールゾーン側、列 3 を抜けた所。slalom.route.yaml の終点
+      entrance: [-2.05, 0.668, 3.141592653589793]   # スタートゾーン側、境界の隙間 (y = 0.2665..1.069) の手前。config/paths/slalom.route.yaml の始点
+      exit: [1.25, 1.273, 3.141592653589793]        # ゴールゾーン側、列 3 を抜けた所。slalom.route.yaml の終点
       forward_route: slalom_forward     # path_follower.yaml の paths にある名前
       backward_route: slalom_backward
 
     # --- 回収 (ノーツの位置は field.yaml の notes_*。番号 0 が外周壁の側) ---
     pick:
-      yaw: 1.5707963            # 回収するときの機体の向き (+y 向き = 後ろをブロックへ向ける)
+      yaw: -1.5707963           # 回収するときの機体の向き (-y 向き = 前の把持機構をブロックへ向ける)
       standoff: 0.15            # [m] ブロックの真上の手前のこの距離から寄る (把持機構の向きと逆へ離れる)
       grip_time: 0.5            # [s] 吸引をオンにしてから持ち上げるまで
 
@@ -38,7 +38,7 @@ task_commander:
     shelf:
       place_depth: 0.085        # [m] ブロックの中心を面からこれだけ奥に置く (前の面が 0.01 m 奥に入る)
     place:
-      yaw: 1.5707963            # 置くときの機体の向き (後ろを棚へ向ける)
+      yaw: -1.5707963           # 置くときの機体の向き (前の把持機構を棚へ向ける)
       standoff: 0.15            # [m] マスの手前のこの距離から差し込む
       release_time: 0.5         # [s] 吸引をオフにしてから持ち上げるまで
 
@@ -56,4 +56,4 @@ task_commander:
 
     grippers:
       names: [gripper0, gripper1]
-      offsets: [-0.45, 0.12, -0.45, -0.12]   # [x0, y0, x1, y1] 機体座標系
+      offsets: [0.45, 0.12, 0.45, -0.12]     # [x0, y0, x1, y1] 機体座標系。gripper0 が左、gripper1 が右

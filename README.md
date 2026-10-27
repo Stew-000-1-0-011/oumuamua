@@ -59,9 +59,9 @@ ros2 run path_follower make_path.py start_to_shelf.route.yaml start_to_shelf.csv
 ros2 run path_follower make_path.py start_to_shelf.route.yaml shelf_to_start.csv --reverse
 ```
 
-定義にはフィールドの壁と機体の外形 (半径 0.30 m の円 + 正面に飛び出した LiDAR) も書いてあり、
+定義にはフィールドの壁と機体の外形 (半径 0.30 m の円 + 後ろに飛び出した LiDAR) も書いてあり、
 外形が壁に `min_clearance` より近づく経路は作るのに失敗する。機体の向きは、最初の隙間から先は進む向きに合わせてある
-(帰りは同じ向きのまま逆にたどるので、後ろ向きに走る)。どの経路を読むかは `config/path_follower.yaml` の `paths`。
+(機体の後ろ (LiDAR の側) を進む向きに向ける。帰りは同じ向きのまま逆にたどるので、前向きに走る)。どの経路を読むかは `config/path_follower.yaml` の `paths`。
 速さの上限は `config/path_follower.yaml`。詳しくは `src/path_follower/README.md`。
 
 ## 起動
@@ -74,8 +74,9 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | --- | --- | --- |
 | `lidar` | `true` | urg_node2 を起動する (configure -> activate まで自動) |
 | `lidar_connection` | `serial` | `ether` / `serial`。`config/urg_<...>.yaml` を使う。serial は `/dev/serial/by-id/usb-Hokuyo_...` を開き、`container/run.sh` はつながっていればこれをコンテナに渡す |
-| `lidar_x` | `0.28` | base_link から見た LiDAR の取付位置 [m] (static TF `base_link -> laser`)。正面の車輪 0 の 8 cm 先 |
-| `lidar_y`, `lidar_yaw` | `0.0` | 同上 (横方向の位置と向き) |
+| `lidar_x` | `-0.28` | base_link から見た LiDAR の取付位置 [m] (static TF `base_link -> laser`)。LiDAR は機体の後ろ側で、車輪 0 の 8 cm 先 |
+| `lidar_y` | `0.0` | 同上 (横方向の位置) |
+| `lidar_yaw` | `pi` | LiDAR の向き [rad]。機体の後ろ (-x) を向いている |
 | `lidar_z` | `0.14` | 走査面の高さ [m]。sotoba_node の `lidar_height` にも渡す |
 | `lidar_upside_down` | `true` | 逆さ付けか。TF の roll と sotoba_node の同名パラメータに渡す |
 | `chassis_params` | `config/chassis_node.yaml` | chassis_node のパラメータ |
@@ -115,13 +116,13 @@ LiDAR の取付 (`lidar_*`) や `estimator` で決まる値 (`pose_source`、`od
 
 次は**例・仮の値のまま**なので、実機に合わせること。
 
-- `src/oumuamua_bringup/config/chassis_node.yaml`: 3 輪オムニ (機体正面 = 中心から車輪 0 の向き、
-  車輪 0..2 は左回りに 120 度ずつ、中心から 0.2 m、半径 0.06 m)。各車輪の正転の向き (`gear_ratio` の符号) は未確認
+- `src/oumuamua_bringup/config/chassis_node.yaml`: 3 輪オムニ (機体正面 = 車輪 0 から中心を見た向き = 把持機構の側。
+  車輪 0 は後ろ、車輪 0..2 は左回りに 120 度ずつ、中心から 0.2 m、半径 0.06 m)。各車輪の正転の向き (`gear_ratio` の符号) は未確認
 - `src/oumuamua_bringup/config/mini_shirasu.yaml`: 基板ごとの CAN ID。ファームの ID は
   `minishirasu-firm/src/config.rs` のコンパイル時定数 なので、
   複数枚つなぐなら基板ごとに書き換えて焼き、ここと合わせる。今は基板 i に 目標 0x110+i / 状態 0x120+i / コマンド 0x130+i / 応答 0x140+i を割り当てている
 
-- `src/oumuamua_bringup/config/task_commander.yaml`: 把持機構の取付位置 (`grippers.offsets`、今は機体の後ろ 0.45 m・左右 0.12 m と仮定) と、
+- `src/oumuamua_bringup/config/task_commander.yaml`: 把持機構の取付位置 (`grippers.offsets`、今は機体の前 0.45 m・左右 0.12 m と仮定) と、
   回収・配置のときの機体の向き
 - `src/oumuamua_bringup/config/gripper.yaml`, `suction.yaml`: 把持機構。ロボマスの ID と種類、昇降の高さ (`lift.positions`)、ボードの位置目標の単位
   (`lift.target_scale`)、行程、吸引の電流 (`suction.current` は 0 A にしてあるので、このままでは吸わない)、
@@ -133,8 +134,8 @@ LiDAR の取付 (`lidar_*`) や `estimator` で決まる値 (`pose_source`、`od
 
 mini-shirasu のファームには通信タイムアウトが無いので、PC やノードが落ちたときに止めるのは
 緊急停止スイッチに頼ることになる。
-sotoba_node の初期姿勢 (`start_x` など) は
-LiDAR の姿勢である点に注意 (base_link ではない)。
+機体の前 (+x) は把持機構の側で、LiDAR と車輪 0 は後ろ。スタート位置 (`field.yaml` の `start_pose`) は
+機体中心の姿勢で、sotoba の初期シード (LiDAR の姿勢) はそこから LiDAR の取付で求める。
 
 ## シミュレーション (`sim:=true`)
 

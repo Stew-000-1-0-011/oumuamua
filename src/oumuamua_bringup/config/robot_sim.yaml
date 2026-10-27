@@ -10,9 +10,9 @@ robot_sim:
     sim_rate: 200.0            # [Hz] 運動の積分の周期
 
     # --- LiDAR の取付 (base_link -> laser)。高さと上下は lidar_height / lidar_upside_down ---
-    lidar_x: 0.28
+    lidar_x: -0.28             # LiDAR は機体の後ろ側
     lidar_y: 0.0
-    lidar_yaw: 0.0
+    lidar_yaw: 3.141592653589793   # 後ろ (-x) を向いている
 
     # --- 真の初期姿勢の、スタート位置 (field.yaml の start_pose) からのずれ (フィールド座標系) ---
     start_offset_x: 0.02       # [m]

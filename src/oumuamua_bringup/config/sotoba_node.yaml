@@ -18,9 +18,9 @@
     # LiDAR の取付 (base_link から見た位置 [m] と向き [rad])。初期シード (LiDAR の初期姿勢) は、
     # 機体のスタート位置 (field.yaml の start_pose) にこれを足したもの。
     # ICPの初期シードなので、実際の置き場所と 0.1m 程度以内で合わせること
-    lidar_x: 0.28
+    lidar_x: -0.28             # LiDAR は機体の後ろ側
     lidar_y: 0.0
-    lidar_yaw: 0.0
+    lidar_yaw: 3.141592653589793   # 後ろ (-x) を向いている
     # LiDAR のZ軸が床を向いている (上下逆さに付いている) か
     lidar_upside_down: true
     # ノーツを推定対象に含めるか (12個ぶんオブジェクトが増える)。

@@ -28,7 +28,7 @@
       # ボード (robomas_center の MotorCtrl.cpp) の位置目標は「ロータの角度 [deg]」で、位置制御を有効にした時点が 0。
       # 昇降は M2006 (ギヤ 36:1) の出力軸に半径 15 mm のピニオン: 出力軸 1 回転で 2π × 0.015 = 0.0942 m 上がる。
       # 高さ 1 m = 1 / 0.0942 回転 × 36 × 360 deg = 137509.9 deg (上がる向きが逆なら符号を反転)
-      target_scale: -137509.9   # 実機で確かめた向き (正で下がった)
+      target_scale: -137509.9   # 実機で確かめた向き (ロボマス ID 1 の機構で、正で下がった)
       target_offset: 0.0
       gear_ratio: 36.0
       meters_per_output_revolution: 0.0942478   # 2π × 0.015 m
@@ -64,21 +64,21 @@
     robomas_target_topic: ""    # 空なら /robomas_target<lift.motor>
     can_rx_topic: /robomas_can_rx
 
-# 左 (task_commander.yaml の grippers.offsets で y = +0.12)
+# 左 (task_commander.yaml の grippers.offsets で y = +0.12)。
+# 機体の前後を入れ替えた (2026-10-27) ので、以前「右」だった機構 (ロボマス ID 2、吸引の基板 5) がこちら
 gripper0:
+  ros__parameters:
+    lift:
+      motor: 2
+      # このモータは付け方が右 (ID 1) と逆なので、目標の向きも逆
+      target_scale: 137509.9
+    suction:
+      target_topic: /suction0/target_current
+
+# 右 (y = -0.12)。以前「左」だった機構 (ロボマス ID 1、吸引の基板 4)
+gripper1:
   ros__parameters:
     lift:
       motor: 1
     suction:
-      target_topic: /suction0/target_current
-
-# 右 (y = -0.12)
-gripper1:
-  ros__parameters:
-    lift:
-      motor: 2
-      # 右はモータの付け方が左と逆なので、目標の向きも逆
-      target_scale: 137509.9
-    suction:
       target_topic: /suction1/target_current
-

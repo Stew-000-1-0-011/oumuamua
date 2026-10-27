@@ -44,4 +44,5 @@
       # 機体中心 (base_link) のスタート位置 [x, y, yaw] (スタートゾーン 1.24 x 0.8 m、y = 0.855..1.655)。
       # sotoba の初期シード (LiDAR の姿勢) は、これと LiDAR の取付 (lidar_x / lidar_y / lidar_yaw) から求める。
       # 経路 (config/paths/*.route.yaml) の始点も、ここに合わせてある
-      start_pose: [-2.2, 1.3, 0.0]
+      # 機体の正面 (把持機構の側) をスタート側 (-x) に、LiDAR をビンゴ側 (+x) に向けて置く
+      start_pose: [-2.2, 1.3, 3.141592653589793]
