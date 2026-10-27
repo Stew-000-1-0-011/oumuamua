@@ -29,7 +29,7 @@
       i_threshold: 0.5
       duty_max: 0.95
       vmax: 24.0
-      imax: 8.0                 # [A] gripper の suction.current より少し上にする (基板側の上限)
+      imax: 12.0                 # [A] gripper の suction.current より少し上にする (基板側の上限)
       wkp: 0.1
       wki: 0.5
       wb: 0.8

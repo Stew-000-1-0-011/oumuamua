@@ -147,101 +147,101 @@ def generate_launch_description():
         output='screen',
     )
 
-    # --- 自己位置 (sotoba_ros) ---
-    sotoba = Node(
-        package='sotoba_ros',
-        executable='sotoba_node',
-        name='sotoba_node',
-        parameters=[
-            config('sotoba_ros', 'sotoba_node.yaml'),
-            config('oumuamua_bringup', 'sotoba_node.yaml'),
-            NodeParams('sotoba_node', {
-                'lidar_height': LaunchConfiguration('lidar_z'),
-                'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
-                'publish_tf': not_estimator,
-            }),
-        ],
-        output='screen',
-    )
-    # sotoba_node は予測をしないので、事前分布を出すノードが要る。
-    # estimator:=true なら state_estimator、false なら sotoba_ros の持続予測 (機体の動きは知らない)
-    persistence_predictor = Node(
-        package='sotoba_ros',
-        executable='persistence_predictor',
-        name='persistence_predictor',
-        parameters=[
-            config('sotoba_ros', 'sotoba_node.yaml'),
-            config('oumuamua_bringup', 'sotoba_node.yaml'),
-        ],
-        remappings=[
-            ('posterior_beliefs', '/sotoba_node/posterior_beliefs'),
-            ('prior_beliefs', '/sotoba_node/prior_beliefs'),
-            ('initial_beliefs', '/sotoba_node/initial_beliefs'),
-        ],
-        output='screen',
-        condition=IfCondition(not_estimator),
-    )
+    # # --- 自己位置 (sotoba_ros) ---
+    # sotoba = Node(
+    #     package='sotoba_ros',
+    #     executable='sotoba_node',
+    #     name='sotoba_node',
+    #     parameters=[
+    #         config('sotoba_ros', 'sotoba_node.yaml'),
+    #         config('oumuamua_bringup', 'sotoba_node.yaml'),
+    #         NodeParams('sotoba_node', {
+    #             'lidar_height': LaunchConfiguration('lidar_z'),
+    #             'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
+    #             'publish_tf': not_estimator,
+    #         }),
+    #     ],
+    #     output='screen',
+    # )
+    # # sotoba_node は予測をしないので、事前分布を出すノードが要る。
+    # # estimator:=true なら state_estimator、false なら sotoba_ros の持続予測 (機体の動きは知らない)
+    # persistence_predictor = Node(
+    #     package='sotoba_ros',
+    #     executable='persistence_predictor',
+    #     name='persistence_predictor',
+    #     parameters=[
+    #         config('sotoba_ros', 'sotoba_node.yaml'),
+    #         config('oumuamua_bringup', 'sotoba_node.yaml'),
+    #     ],
+    #     remappings=[
+    #         ('posterior_beliefs', '/sotoba_node/posterior_beliefs'),
+    #         ('prior_beliefs', '/sotoba_node/prior_beliefs'),
+    #         ('initial_beliefs', '/sotoba_node/initial_beliefs'),
+    #     ],
+    #     output='screen',
+    #     condition=IfCondition(not_estimator),
+    # )
 
-    # --- 状態推定 (state_estimator) ---
-    def make_estimator(context):
-        if estimator.perform(context) != 'true':
-            return []
-        source = velocity_source.perform(context)
-        params = [
-            config('state_estimator', 'state_estimator.yaml'),
-            config('oumuamua_bringup', 'state_estimator.yaml'),
-        ]
-        if source == 'cmd_vel':
-            velocity_topic = '/cmd_vel'
-            tau = float(LaunchConfiguration('cmd_tau').perform(context))
-            params.append(NodeParams('state_estimator', {'filter.tau_linear': tau, 'filter.tau_angular': tau}))
-        elif source == 'wheels':
-            velocity_topic = '/robot_sim/body_velocity' if sim.perform(context) == 'true' else '/chassis_node/body_velocity'
-        else:
-            raise RuntimeError(f"velocity_source must be 'wheels' or 'cmd_vel': {source}")
-        if odometry_only.perform(context) == 'true':
-            params.append(NodeParams('state_estimator', {'dead_reckoning': True}))
-        return [Node(
-            package='state_estimator',
-            executable='state_estimator_node',
-            name='state_estimator',
-            parameters=params,
-            remappings=[('~/body_velocity', velocity_topic)],
-            output='screen',
-        )]
-    state_estimator = OpaqueFunction(function=make_estimator)
+    # # --- 状態推定 (state_estimator) ---
+    # def make_estimator(context):
+    #     if estimator.perform(context) != 'true':
+    #         return []
+    #     source = velocity_source.perform(context)
+    #     params = [
+    #         config('state_estimator', 'state_estimator.yaml'),
+    #         config('oumuamua_bringup', 'state_estimator.yaml'),
+    #     ]
+    #     if source == 'cmd_vel':
+    #         velocity_topic = '/cmd_vel'
+    #         tau = float(LaunchConfiguration('cmd_tau').perform(context))
+    #         params.append(NodeParams('state_estimator', {'filter.tau_linear': tau, 'filter.tau_angular': tau}))
+    #     elif source == 'wheels':
+    #         velocity_topic = '/robot_sim/body_velocity' if sim.perform(context) == 'true' else '/chassis_node/body_velocity'
+    #     else:
+    #         raise RuntimeError(f"velocity_source must be 'wheels' or 'cmd_vel': {source}")
+    #     if odometry_only.perform(context) == 'true':
+    #         params.append(NodeParams('state_estimator', {'dead_reckoning': True}))
+    #     return [Node(
+    #         package='state_estimator',
+    #         executable='state_estimator_node',
+    #         name='state_estimator',
+    #         parameters=params,
+    #         remappings=[('~/body_velocity', velocity_topic)],
+    #         output='screen',
+    #     )]
+    # state_estimator = OpaqueFunction(function=make_estimator)
 
-    # --- 軌道追従 (holonomic_tracker) ---
-    tracker = Node(
-        package='holonomic_tracker',
-        executable='tracker_node',
-        name='tracker_node',
-        parameters=[
-            config('holonomic_tracker', 'tracker_node.yaml'),
-            config('oumuamua_bringup', 'tracker_node.yaml'),
-            NodeParams('tracker_node', {
-                'pose_source': PythonExpression(["'odom' if '", estimator, "' == 'true' else 'tf'"]),
-            }),
-        ],
-        output='screen',
-    )
+    # # --- 軌道追従 (holonomic_tracker) ---
+    # tracker = Node(
+    #     package='holonomic_tracker',
+    #     executable='tracker_node',
+    #     name='tracker_node',
+    #     parameters=[
+    #         config('holonomic_tracker', 'tracker_node.yaml'),
+    #         config('oumuamua_bringup', 'tracker_node.yaml'),
+    #         NodeParams('tracker_node', {
+    #             'pose_source': PythonExpression(["'odom' if '", estimator, "' == 'true' else 'tf'"]),
+    #         }),
+    #     ],
+    #     output='screen',
+    # )
 
-    # --- 経路 (path_follower)。起動しただけでは走らない。~/start で経路の始点から走り出す ---
-    path_follower = Node(
-        package='path_follower',
-        executable='path_follower_node',
-        name='path_follower',
-        parameters=[
-            config('path_follower', 'path_follower.yaml'),
-            config('oumuamua_bringup', 'path_follower.yaml'),
-            NodeParams('path_follower', {
-                'path_dir': LaunchConfiguration('path_dir'),
-                'odom_topic': PythonExpression(
-                    ["'/state_estimator/odom' if '", estimator, "' == 'true' else '/tracker_node/odom'"]),
-            }),
-        ],
-        output='screen',
-    )
+    # # --- 経路 (path_follower)。起動しただけでは走らない。~/start で経路の始点から走り出す ---
+    # path_follower = Node(
+    #     package='path_follower',
+    #     executable='path_follower_node',
+    #     name='path_follower',
+    #     parameters=[
+    #         config('path_follower', 'path_follower.yaml'),
+    #         config('oumuamua_bringup', 'path_follower.yaml'),
+    #         NodeParams('path_follower', {
+    #             'path_dir': LaunchConfiguration('path_dir'),
+    #             'odom_topic': PythonExpression(
+    #                 ["'/state_estimator/odom' if '", estimator, "' == 'true' else '/tracker_node/odom'"]),
+    #         }),
+    #     ],
+    #     output='screen',
+    # )
 
     # --- 足回り (omni_chassis) ---
     chassis = Node(
@@ -421,11 +421,11 @@ def generate_launch_description():
         urg_activate,
         urg,
         lidar_tf,
-        sotoba,
-        persistence_predictor,
-        state_estimator,
-        tracker,
-        path_follower,
+        # sotoba,
+        # persistence_predictor,
+        # state_estimator,
+        # tracker,
+        # path_follower,
         chassis,
         wheels,
         grippers,

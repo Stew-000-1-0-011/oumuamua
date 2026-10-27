@@ -36,7 +36,7 @@
       min_height: 0.0
       max_height: 0.85
       # 初めて動かすので遅めに (ロータで約 1100 rpm)
-      max_speed: 0.05
+      max_speed: 0.15
       tolerance: 0.005
       settle_time: 0.2
       timeout_margin: 2.0
@@ -58,7 +58,8 @@
       # position_names: [pick, clear, carry, row0_approach, row0_release, row1_approach, row1_release, row2_approach, row2_release]
     suction:
       # ほぼ全開で回す (基板の電流ループが duty_max まで出す)。上限は suction.yaml の settings.imax (8 A)
-      current: 7.5
+      # 負で吸う向きに回る (正では逆に回った)
+      current: -12.0            # 実数で書く (-10 だと整数になり、ノードが起動時に落ちる)
     robomas_frame_topic: /robomas_frame
     can_rx_topic: /robomas_can_rx
 
