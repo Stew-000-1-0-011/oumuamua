@@ -5,8 +5,8 @@
 
 - 昇降: ロボマス (C610 / C620) を、[robomas_plugins](https://github.com/Stew-000-1-0-011/robomas_plugins)
   の USB-CAN ボードの位置制御 (`RobomasFrame.mode = 2`) で動かす。高さは起動時の位置を 0 とする
-- 吸引: mini-shirasu を電流制御で動かす。電流の制御そのものは mini_shirasu_node (`mode: current`) が行い、
-  このノードはオンなら `suction.current` [A]、オフなら 0 A を送り続ける
+- 吸引: mini-shirasu を動かす。制御そのものは mini_shirasu_node が行い (`mode: current` なら電流制御、`mode: duty` ならデューティ)、
+  このノードはオンなら `suction.target`、オフなら 0 を `suction.target_topic` (その mode の `~/target_current` / `~/target_duty`) に送り続ける
 
 **実機ではまだ動かしていない。** ボードの位置目標の単位、モータの ID、吸引の電流などは仮の値。
 

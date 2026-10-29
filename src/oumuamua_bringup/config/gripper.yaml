@@ -10,7 +10,7 @@
 # - lift.meters_per_output_revolution: 出力軸 1 回転で上がる高さ (0 ならフィードバックを使わない)
 # - lift.max_height: 昇降の行程
 # - lift.positions: 使う高さ (回収・運搬・棚の各段)。~/set_lift_position で番号を送って選ぶ
-# - suction.current と suction<i> の settings.imax: 吸引モータの許容電流
+# - suction.target と suction<i> の settings.imax / duty_max: 吸引の強さ (左は電流 [A]、右はデューティ)
 # - suction<i> の can_id は suction.yaml
 
 # --- 全機構共通 ---
@@ -57,9 +57,10 @@
       # positions: [0.0, 0.03, 0.12, 0.340, 0.325, 0.573, 0.558, 0.807, 0.792]
       # position_names: [pick, clear, carry, row0_approach, row0_release, row1_approach, row1_release, row2_approach, row2_release]
     suction:
-      # ほぼ全開で回す (基板の電流ループが duty_max まで出す)。上限は suction.yaml の settings.imax (8 A)
+      # オンのときに suction.target_topic へ送る値。左 (gripper0) は電流制御で、単位は [A]。
+      # ほぼ全開で回す (基板の電流ループが duty_max まで出す)。上限は suction.yaml の settings.imax (12 A)
       # 負で吸う向きに回る (正では逆に回った)
-      current: -12.0            # 実数で書く (-10 だと整数になり、ノードが起動時に落ちる)
+      target: -12.0             # 実数で書く (-10 だと整数になり、ノードが起動時に落ちる)
     robomas_frame_topic: /robomas_frame
     robomas_target_topic: ""    # 空なら /robomas_target<lift.motor>
     can_rx_topic: /robomas_can_rx
@@ -81,4 +82,7 @@ gripper1:
     lift:
       motor: 1
     suction:
-      target_topic: /suction1/target_current
+      # 右の吸引はデューティ制御 (suction.yaml の suction1 は mode: duty)。値はデューティ [-1, 1] で、
+      # 基板の duty_max (0.95) で切り詰められる。向きは左と同じく負で吸うと仮定している (実機で確かめること)
+      target_topic: /suction1/target_duty
+      target: -0.95

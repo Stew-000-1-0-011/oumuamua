@@ -1,6 +1,6 @@
-# 把持機構の吸引のモータ (mini_shirasu_node: suction<i>、電流制御) のパラメータ。
+# 把持機構の吸引のモータ (mini_shirasu_node: suction<i>) のパラメータ。左 (suction0) は電流制御、右 (suction1) はデューティ制御。
 # mini_shirasu_node は既定値を持たないので、全部ここに書く。項目の意味は mini_shirasu_ros の README を参照。
-# オン/オフと電流は gripper.yaml の gripper<i> が決め、/suction<i>/target_current に送ってくる。
+# オン/オフと目標は gripper.yaml の gripper<i> が決め、/suction0/target_current・/suction1/target_duty に送ってくる。
 # !!! can_id は各基板のファームの config.rs と合わせること。足回りが基板 0..2 (0x110..0x112) を
 #     使っているので、吸引は左が基板 5、右が基板 4 !!!
 
@@ -13,7 +13,7 @@
     enable_on_start: true
     reset_fault_on_start: true
     control_rate: 50.0
-    target_timeout: 0.2         # gripper_node が止まったら 0 A になる
+    target_timeout: 0.2         # gripper_node が止まったら 0 (電流 0 A / デューティ 0) になる
     command_timeout: 0.1
     command_retries: 3
     status_timeout: 0.5
@@ -30,7 +30,7 @@
       i_threshold: 0.5
       duty_max: 0.95
       vmax: 24.0
-      imax: 12.0                 # [A] gripper の suction.current より少し上にする (基板側の上限)
+      imax: 12.0                 # [A] gripper の suction.target より少し上にする (基板側の上限。電流制御のとき)
       wkp: 0.1
       wki: 0.5
       wb: 0.8
@@ -48,7 +48,10 @@ suction0:
   ros__parameters:
     can_id: {target: 0x115, status: 0x125, command: 0x135, response: 0x145}
 
-# 右 (gripper1)。以前「左」だった基板 4
+# 右 (gripper1)。以前「左」だった基板 4。
+# デューティ制御: 電流ループを使わず、目標のデューティをそのまま PWM に出す (settings.duty_max で切り詰める)。
+# 基板のファームにデューティモード (mini-shirasu2 5617592 以降) が要る
 suction1:
   ros__parameters:
+    mode: duty
     can_id: {target: 0x114, status: 0x124, command: 0x134, response: 0x144}

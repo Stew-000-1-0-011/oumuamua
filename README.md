@@ -125,7 +125,7 @@ LiDAR の取付 (`lidar_*`) や `estimator` で決まる値 (`pose_source`、`od
 - `src/oumuamua_bringup/config/task_commander.yaml`: 把持機構の取付位置 (`grippers.offsets`、今は機体の前 0.45 m・左右 0.12 m と仮定) と、
   回収・配置のときの機体の向き
 - `src/oumuamua_bringup/config/gripper.yaml`, `suction.yaml`: 把持機構。ロボマスの ID と種類、昇降の高さ (`lift.positions`)、ボードの位置目標の単位
-  (`lift.target_scale`)、行程、吸引の電流 (`suction.current` は 0 A にしてあるので、このままでは吸わない)、
+  (`lift.target_scale`)、行程、吸引の強さ (`suction.target`。左は電流制御 [A]、右はデューティ制御)、
   吸引の基板の CAN ID (左が基板 4 = 0x114..、右が基板 5 = 0x115..)
 
 モータドライバの設定 (`settings.*`) は mini-shirasu2 の `bench.rs` で実機が動いた値で、

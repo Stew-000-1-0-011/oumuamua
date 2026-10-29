@@ -8,8 +8,8 @@
 /// - ロボマスのフィードバック (CAN 0x200 + k) が robomas_can_rx に届いていれば、ロータの回転を数え上げて
 ///   今の高さとする。届いていなければ、送っている指令を今の高さとみなす
 ///
-/// 吸引: mini-shirasu を電流制御で動かす (mini_shirasu_node の mode: current)。
-/// オンなら suction.current [A]、オフなら 0 A を、control_rate で suction.target_topic に送り続ける
+/// 吸引: mini-shirasu を動かす。制御は mini_shirasu_node が行う (mode: current なら電流制御、duty ならデューティ)。
+/// オンなら suction.target、オフなら 0 を、control_rate で suction.target_topic (その mode の ~/target_*) に送り続ける
 /// (mini_shirasu_node は目標が途切れると 0 A にする)。
 ///
 /// | 方向 | 名前 | 型 |
@@ -97,10 +97,10 @@ namespace {
 			const bool enable_on_start = this->declare_parameter<bool>("lift.enable_on_start");
 
 			// --- 吸引 ---
-			this->suction_current_ = this->declare_parameter<double>("suction.current");
+			this->suction_target_ = this->declare_parameter<double>("suction.target");
 			const auto suction_topic = this->declare_parameter<std::string>("suction.target_topic");
 			if (suction_topic.empty()) {
-				throw std::invalid_argument("suction.target_topic must be set (mini_shirasu_node's ~/target_current)");
+				throw std::invalid_argument("suction.target_topic must be set (mini_shirasu_node's ~/target_current or ~/target_duty)");
 			}
 
 			// --- 通信 ---
@@ -165,9 +165,9 @@ namespace {
 			}
 			this->timer_ = this->create_wall_timer(std::chrono::duration<double>(this->dt_), [this] { this->on_timer(); });
 			this->config_timer_ = this->create_wall_timer(std::chrono::seconds{1}, [this] { this->resend_config(); });
-			RCLCPP_INFO(this->get_logger(), "lift: motor %d (%s), height %.3f..%.3f m; suction: %.2f A -> %s",
+			RCLCPP_INFO(this->get_logger(), "lift: motor %d (%s), height %.3f..%.3f m; suction: %.3f -> %s",
 				this->motor_, this->c620_ ? "C620" : "C610", this->min_height_, this->max_height_,
-				this->suction_current_, suction_topic.c_str());
+				this->suction_target_, suction_topic.c_str());
 		}
 
 		~GripperNode() override {
@@ -425,7 +425,7 @@ namespace {
 			this->update_goal(this->update_motion());
 
 			std_msgs::msg::Float64 current{};
-			current.data = this->suction_on_ ? this->suction_current_ : 0.0;
+			current.data = this->suction_on_ ? this->suction_target_ : 0.0;
 			this->suction_pub_->publish(current);
 
 			gripper::msg::GripperState state{};
@@ -438,7 +438,7 @@ namespace {
 			state.lift_arrived = this->arrived_;
 			state.lift_feedback = this->feedback_valid();
 			state.suction_on = this->suction_on_;
-			state.suction_current = current.data;
+			state.suction_target = current.data;
 			this->state_pub_->publish(state);
 		}
 
@@ -462,7 +462,7 @@ namespace {
 		double timeout_margin_{};
 		double feedback_timeout_{};
 		int config_repeat_{};
-		double suction_current_{};
+		double suction_target_{};
 		std::vector<double> positions_{};
 		std::vector<std::string> position_names_{};
 

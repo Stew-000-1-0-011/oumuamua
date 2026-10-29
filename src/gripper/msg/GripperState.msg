@@ -10,4 +10,4 @@ bool lift_arrived          # 最後のゴールに着いたか (動いている�
 bool lift_feedback         # ロボマスのフィードバック (CAN 0x200 + モータ番号) が届いているか
 
 bool suction_on
-float64 suction_current    # [A] mini-shirasu に送っている電流の目標
+float64 suction_target     # mini-shirasu に送っている目標 (電流 [A] かデューティ。suction.target_topic の種類による)
