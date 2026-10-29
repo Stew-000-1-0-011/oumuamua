@@ -1,0 +1,15 @@
+# 吸引なしの昇降機構。高さ・行程は使わず、ロボマスのロータ角速度で指示する。
+harite:
+  ros__parameters:
+    motor: 3
+    c620: false                 # C610 (既存の昇降と同じ)
+    vel_kp: 0.15                # 既存の昇降と同じ速度 PI ゲイン
+    vel_ki: 9.0
+    temperature_limit: 50
+    enable_on_start: true       # 有効化しても速度指令が来るまでは 0
+    control_rate: 50.0
+    command_timeout: 0.2        # [s] 指令が途切れたら速度 0。ROS 時刻の停止に影響されない
+    config_repeat: 3            # ブリッジの接続待ちのため、1 s ごとに設定を再送
+    max_velocity: 100.0         # [rad/s] ロータ基準の絶対値上限。約 955 rpm、実機で調整する
+    robomas_frame_topic: /robomas_frame
+    robomas_target_topic: ""    # 空なら /robomas_target<motor> (ID 3 なら /robomas_target3)

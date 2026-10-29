@@ -296,6 +296,18 @@ def generate_launch_description():
         return nodes
     grippers = OpaqueFunction(function=make_grippers)
 
+    # --- harite (吸引なし、ロボマス ID 3 の速度制御)。実機でだけ立てる ---
+    harite = Node(
+        package='harite',
+        executable='harite_node',
+        name='harite',
+        parameters=[LaunchConfiguration('harite_params')],
+        output='screen',
+        condition=IfCondition(PythonExpression([
+            "'", LaunchConfiguration('harite'), "' == 'true' and '", sim, "' != 'true'",
+        ])),
+    )
+
     # --- 作業の指示 (task_commander: ~/run で作業を 1 つずつ受け、path_follower と gripper<i> を動かす) ---
     task_commander = Node(
         package='task_commander',
@@ -398,6 +410,10 @@ def generate_launch_description():
             'suction_params', default_value=config('oumuamua_bringup', 'suction.yaml'),
             description='吸引の mini_shirasu_node (suction0..) のパラメータファイル'),
         DeclareLaunchArgument('bridge', default_value='true', description='robomas_bridge (USB-CAN) を起動する'),
+        DeclareLaunchArgument('harite', default_value='true', description='harite (ロボマスの速度制御専用の昇降) を起動する。実機のみ'),
+        DeclareLaunchArgument(
+            'harite_params', default_value=config('oumuamua_bringup', 'harite.yaml'),
+            description='harite_node のパラメータファイル'),
         DeclareLaunchArgument('rviz', default_value='false', description='RViz2 を起動する'),
         DeclareLaunchArgument(
             'estimator', default_value='true',
@@ -430,6 +446,7 @@ def generate_launch_description():
         chassis,
         wheels,
         grippers,
+        harite,
         task_commander,
         robomas,
         robot_sim,

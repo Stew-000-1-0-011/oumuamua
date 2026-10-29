@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>harite</name>
+  <version>0.0.0</version>
+  <description>ロボマスによる速度制御専用の昇降機構。吸引・位置制御は持たない。</description>
+  <maintainer email="shnsk0204@gmail.com">Stew</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>robomas_plugins</depend>
+  <test_depend>ament_cmake_test</test_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

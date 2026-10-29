@@ -2,6 +2,7 @@
 """ロボットを止める (速度 0)。scripts/stop.sh から呼ぶ。
 
 経路の目標 (path_follower) と追従 (tracker_node) を止め、その間 /cmd_vel に速度 0 を流し続ける。
+harite の速度制御も無効にする (再開には /harite/enable true が必要)。
 --free なら各車輪の出力も切る。ros2 CLI を何度も起動すると数秒かかるので、1 つのノードでまとめて行う。
 """
 import sys
@@ -27,6 +28,7 @@ def main():
     calls = [(node.create_client(Trigger, '/path_follower/stop'), Trigger.Request())]
     disable = SetBool.Request(data=False)
     calls.append((node.create_client(SetBool, '/tracker_node/enable'), disable))
+    calls.append((node.create_client(SetBool, '/harite/enable'), disable))
     if free:
         calls += [(node.create_client(SetBool, f'/wheel{i}/enable'), disable) for i in range(3)]
 

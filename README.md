@@ -1,6 +1,6 @@
 # oumuamua
 
-ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` と `gripper` 以外のパッケージは `src/` 以下の git submodule。
+ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。外部ドライバなどは `src/` 以下の git submodule、機体の起動設定や `gripper`・`harite` などはこのリポジトリで管理する。
 
 | パッケージ | 内容 |
 | --- | --- |
@@ -14,6 +14,7 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` と
 | `src/oumuamua_sim` | `/cmd_vel` から先のシミュレータ (平面運動と 2D LiDAR) |
 | `src/state_estimator` | 自己位置と機体速度の推定。sotoba_node と対になって事前分布を渡す |
 | `src/gripper` | 把持機構 (ロボマスによる昇降 + mini-shirasu の電流制御による吸引) 1 つぶんを動かすノード。機構の数だけ立てる |
+| `src/harite` | 吸引なしの昇降機構。ロボマス ID 3 / C610 を robomas_plugins 経由で速度制御する |
 | `src/task_commander` | 機体に作業 (ブロックの回収、スラロームの往復、棚への配置、各地点への移動) を 1 つずつ指示する |
 | `src/path_follower` | 起動前に作った経路ファイルを読み、速度計画を付けて tracker_node に目標を出す。経路ファイルを作るスクリプト付き |
 
@@ -29,6 +30,7 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。`oumuamua_bringup` と
 - 把持機構 i (`i = 0, 1`): gripper_node (`gripper<i>`) が `~/set_lift_position` (`config/gripper.yaml` の `lift.positions` の番号) で昇降し、`~/set_suction` で吸引をオン/オフする。
   昇降は `/robomas_frame`・`/robomas_target<k>` -> robomas_bridge -> ロボマス (ボードの位置制御)、
   吸引は `/suction<i>/target_current` -> mini_shirasu_node (`suction<i>`、電流制御) -> mini-shirasu。詳しくは `src/gripper/README.md`
+- harite は `/harite/target_velocity` (ロータ角速度 [rad/s]) を受け、`/robomas_frame` (速度モード)・`/robomas_target3` -> robomas_bridge -> ロボマス ID 3 を動かす。吸引・位置制御は持たない。詳しくは [src/harite/README.md](src/harite/README.md)
 - task_commander が `~/run` (アクション) で作業を受け、path_follower の `~/follow` と gripper<i> を順に動かす。詳しくは `src/task_commander/README.md`
 - 車輪の実測: mini_shirasu_node の `~/joint_state` -> chassis_node が機体速度にして `~/body_velocity`
   -> state_estimator の `~/body_velocity` (車輪オドメトリ)
@@ -85,6 +87,8 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `gripper_count` | `2` | 把持機構 (`gripper<i>` と `suction<i>`) の数。`sim:=true` なら `gripper<i>` だけ立てる |
 | `gripper_params` | `config/gripper.yaml` | gripper_node (`gripper0..`) のパラメータ |
 | `suction_params` | `config/suction.yaml` | 吸引の mini_shirasu_node (`suction0..`) のパラメータ |
+| `harite` | `true` | 吸引なしの昇降 harite を起動する。`sim:=true` では起動しない |
+| `harite_params` | `config/harite.yaml` | harite のパラメータ (ID 3、C610、速度指令の上限とタイムアウト) |
 | `bridge` | `true` | robomas_bridge (USB-CAN) を起動する |
 | `rviz` | `false` | RViz2 を起動する |
 | `sim` | `false` | `/cmd_vel` から先をシミュレータにする (下の「シミュレーション」) |
@@ -102,6 +106,7 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | `chassis_node.yaml` | chassis_node (omni_chassis) |
 | `mini_shirasu.yaml` | wheel0..2 (mini_shirasu_node) |
 | `gripper.yaml` / `suction.yaml` | gripper0..1 (gripper_node) / suction0..1 (mini_shirasu_node) |
+| `harite.yaml` | harite_node (ロボマスの速度制御専用の昇降) |
 | `task_commander.yaml` | task_commander |
 | `sotoba_node.yaml` | sotoba_node と persistence_predictor (sotoba_ros)。robot_sim もノーツの有無をここから読む |
 | `state_estimator.yaml` | state_estimator |
