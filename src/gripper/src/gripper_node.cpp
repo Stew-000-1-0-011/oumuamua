@@ -87,6 +87,10 @@ namespace {
 			this->current_guard_.emplace(
 				this->declare_parameter<double>("lift.overcurrent_threshold"),
 				this->declare_parameter<double>("lift.overcurrent_duration"), this->feedback_timeout_);
+			this->overcurrent_backoff_ = this->declare_parameter<double>("lift.overcurrent_backoff");
+			if (!std::isfinite(this->overcurrent_backoff_) || this->overcurrent_backoff_ < 0.0) {
+				throw std::invalid_argument("lift.overcurrent_backoff must be finite and not negative");
+			}
 			if (!std::isfinite(this->target_scale_) || this->target_scale_ == 0.0
 				|| !std::isfinite(this->gear_ratio_) || this->gear_ratio_ <= 0.0
 				|| !std::isfinite(this->meters_per_output_revolution_) || this->meters_per_output_revolution_ <= 0.0) {
@@ -289,12 +293,15 @@ namespace {
 				this->stop_move();
 				this->ramp_ = gripper::Ramp{actual};
 				// Holding the old command would continue pushing into the end stop.
-				// Reinitialize position control to remove stored PI effort, then hold here.
+				// Reinitialize position control to remove stored PI effort, hold here,
+				// then step back from the stop by lift.overcurrent_backoff (the timer ramps there).
 				this->send_mode(mode_position);
 				this->config_sent_ = this->config_repeat_;
 				this->publish_lift_target(actual);
-				RCLCPP_ERROR(this->get_logger(), "lift overcurrent %.2f A: blocked %s at %.4f m",
-					this->lift_current_, stopped > 0 ? "upward" : "downward", actual);
+				const double backoff = std::clamp(actual - stopped * this->overcurrent_backoff_, this->min_height_, this->max_height_);
+				this->ramp_.set_goal(backoff);
+				RCLCPP_ERROR(this->get_logger(), "lift overcurrent %.2f A: blocked %s at %.4f m; backing off to %.4f m",
+					this->lift_current_, stopped > 0 ? "upward" : "downward", actual, backoff);
 			}
 		}
 
@@ -565,6 +572,7 @@ namespace {
 		gripper::RotorCounter counter_{};
 		std::optional<gripper::CurrentGuard::TimePoint> last_feedback_{};
 		std::optional<gripper::CurrentGuard> current_guard_{};
+		double overcurrent_backoff_{};
 		double lift_current_{};
 		double board_zero_target_{};
 		bool position_initialized_{false};

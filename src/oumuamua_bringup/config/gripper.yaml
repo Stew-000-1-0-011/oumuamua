@@ -38,6 +38,7 @@
       # gripper0 / gripper1 の lift 以下で個別に上書き可能。正の実数で指定する。
       overcurrent_threshold: 8.0   # [A] C610 の電流フィードバックから換算
       overcurrent_duration: 0.2    # [s] 瞬間的な起動電流では止めない
+      overcurrent_backoff: 0.005   # [m] 止めた後、押していた端からこれだけ離す (端に押し付けたままにしない)
       min_height: 0.0
       max_height: 0.85
       # 初めて動かすので遅めに (ロータで約 1100 rpm)
@@ -90,4 +91,4 @@ gripper1:
       # 右の吸引はデューティ制御 (suction.yaml の suction1 は mode: duty)。値はデューティ [-1, 1] で、
       # 基板の duty_max (0.95) で切り詰められる。向きは左と同じく負で吸うと仮定している (実機で確かめること)
       target_topic: /suction1/target_duty
-      target: -0.95
+      target: -1.0

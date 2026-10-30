@@ -87,8 +87,9 @@ class CurrentProtectionTest(unittest.TestCase):
                 self.pump(0.15)
                 self.assertFalse(self.state.lift_moving)
                 self.assertFalse(self.state.lift_arrived)
-                self.assertAlmostEqual(self.state.lift_command, self.state.lift_height, places=6)
-                self.assertAlmostEqual(self.target, 0.0, places=3)
+                # The lift steps back from the upper stop by lift.overcurrent_backoff (5 mm).
+                self.wait(lambda: abs(self.state.lift_command - (self.state.lift_height - 0.005)) < 1e-6)
+                self.assertAlmostEqual(sign * self.target, -0.005 * 137509.9, delta=1.0)
                 self.assertIn(2, self.modes[modes_before:])  # PI / board origin reset, holding enabled
                 result = self.future(action_result)
                 self.assertEqual(result.status, 6)  # STATUS_ABORTED
