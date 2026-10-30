@@ -53,6 +53,12 @@ ros2 service call /path_follower/stop std_srvs/srv/Trigger                   # �
 `slalom.route.yaml` から作り、task_commander が使う。`start_to_shelf.route.yaml` が定義で、そこから
 行き (`start_to_shelf.csv`) と帰り (`shelf_to_start.csv`。同じ経路を逆にたどる) を作ってある。定義を変えたら両方作り直す:
 
+スラロームは添付CADの上下形状を `config/footprints/{raised,lowered}.yaml` に保存し、原座標を
+`(x_base,y_base)=(-y_attachment,x_attachment)` で変換して検証する。往復とも全昇降がcarryに到達してから通過し、
+入口・出口では下形状も40 mm以上の余裕を確認する。本文の壁厚38 mmに合わせて検証上だけ壁を拡大する。
+再生成コマンドは `config/paths/slalom.route.yaml` 冒頭、図と検証結果は `docs/superpowers/artifacts/` を参照。
+上形状を使う前提として、持ち上げた機構・保持ノーツの下面が90 mmの壁より高いことを実機で確認する。
+
 ```bash
 cd src/oumuamua_bringup/config/paths
 ros2 run path_follower make_path.py start_to_shelf.route.yaml start_to_shelf.csv --plot /tmp/preview.png

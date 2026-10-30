@@ -69,6 +69,11 @@ install(PROGRAMS scripts/make_path.py
 )
 
 if(BUILD_TESTING)
+	find_package(Python3 REQUIRED COMPONENTS Interpreter)
+	ament_add_test(make_path
+		COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/make_path_test.py"
+		GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+	)
 	add_executable(path_follower_test test/trajectory_test.cpp)
 	target_link_libraries(path_follower_test PRIVATE path_follower_core)
 	ament_add_test(path_follower
