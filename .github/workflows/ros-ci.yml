@@ -23,7 +23,7 @@ jobs:
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/ws" -e CMAKE_BUILD_PARALLEL_LEVEL=2 oumuamua-ci bash -ec '
             source /opt/ros/$ROS_DISTRO/setup.bash
-            colcon build --executor sequential --event-handlers console_direct+
+            colcon build --executor parallel --parallel-workers 2 --event-handlers console_direct+
           '
       # Build all dependencies, but test only packages maintained in this repository.
       # Submodule tests include external style rules and physical LiDAR access.
@@ -50,4 +50,3 @@ jobs:
           name: colcon-logs
           path: log/
           if-no-files-found: ignore
-

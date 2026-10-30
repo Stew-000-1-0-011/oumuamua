@@ -73,6 +73,14 @@ if(BUILD_TESTING)
 		COMMAND "$<TARGET_FILE:gripper_lift_test>"
 		GENERATE_RESULT_FOR_RETURN_CODE_ZERO
 	)
+	find_package(Python3 REQUIRED COMPONENTS Interpreter)
+	ament_add_test(gripper_current_guard_ros
+		COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/current_guard_ros_test.py"
+			"$<TARGET_FILE:gripper_node>"
+			"${CMAKE_CURRENT_SOURCE_DIR}/../oumuamua_bringup/config/gripper.yaml"
+		TIMEOUT 90
+		GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+	)
 endif()
 
 ament_package()

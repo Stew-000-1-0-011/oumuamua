@@ -8,6 +8,11 @@ int32 lift_position        # lift_goal が lift.positions の何番目か (~/set
 bool lift_moving           # ゴールへ向かっている途中か
 bool lift_arrived          # 最後のゴールに着いたか (動いている途中・時間切れ・止めたときは false)
 bool lift_feedback         # ロボマスのフィードバック (CAN 0x200 + モータ番号) が届いているか
+float64 lift_current       # [A] 最後に受信した電流。lift_feedback が false なら古い値
+bool lift_upper_limited    # 高電流の継続で上方向の限界を検出したか
+bool lift_lower_limited    # 高電流の継続で下方向の限界を検出したか
+float64 lift_upper_limit   # [m] 検出した上限 (未検出なら lift.max_height)
+float64 lift_lower_limit   # [m] 検出した下限 (未検出なら lift.min_height)
 
 bool suction_on
 float64 suction_target     # mini-shirasu に送っている目標 (電流 [A] かデューティ。suction.target_topic の種類による)

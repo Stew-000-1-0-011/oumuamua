@@ -61,10 +61,46 @@ ros2 topic echo /gripper0/state
   `距離 / max_speed + lift.timeout_margin` 以内に着かなければ失敗
 - フィードバック: ロボマスの ESC が出す 0x200 + k が `can_rx_topic` に届き、`lift.meters_per_output_revolution` が 0 でなければ、
   ロータの角度を数え上げて今の高さとする (`ロータの回転 / gear_ratio * meters_per_output_revolution`)。
-  届かなければ、送っている指令を今の高さとみなす (`GripperState.lift_feedback` が false)
+  届かなければ状態表示には指令値を使う (`GripperState.lift_feedback` が false)。
+  電流保護には実測が必要なので、フィードバックが無い間の新しい移動要求は拒否する
 - ボードがつながる前に設定を送ると捨てられるので、起動直後は 1 s ごとに `lift.config_repeat` 回まで送り直す
 - ノードが終わるときは、昇降を無効にし吸引を 0 A にする (届くとは限らない)。
   落ちたときは、mini_shirasu_node が目標の途切れ (`target_timeout`) で吸引を 0 A にする
+
+## 電流による昇降端の保護
+
+左右の昇降 (`gripper0` / `gripper1`) では、CAN の実測電流の絶対値が
+`lift.overcurrent_threshold` [A] 以上のまま `lift.overcurrent_duration` [s] 続くと停止する。
+設定は `oumuamua_bringup/config/gripper.yaml` の共通 `lift` 以下で指定し、各 `gripper<i>` で上書きできる。
+暫定値は **8.0 A / 0.2 s**。この値は実機で校正済みではない。通常負荷の電流・起動時ピークと
+ESC の保護停止までの時間を確認して設定する。左右で異なる値にもできる。
+
+```yaml
+gripper0:
+  ros__parameters:
+    lift:
+      overcurrent_threshold: 8.0
+      overcurrent_duration: 0.2
+```
+
+- 向きは、送信中の位置指令と実測高さの差から決める。左右のモータの回転方向の違いも反映する。
+  上段の目標が機構の外にあってランプ指令が既に到達済みでも、実測位置との差があれば監視を続ける。
+- 検出時は実測高さを上限または下限として記録し、進行中のアクションを失敗 (`reached=false`) で終了する。
+  `lift_arrived` も false となる。サービスで開始した移動の停止は `~/state` で確認する。
+- 到達できない位置指令を破棄し、実測位置で保持し直す。ボードに位置モードを再送して PI の積分値を消す。
+  同時に変わるボードの原点は内部で補正するため、下段・中段などの高さ指定は引き続き同じ座標で使える。
+- 検出した限界以上・以下の要求は、位置番号サービスと高さ指定アクションの両方で拒否する。
+  制限の内側への退避は許可する。電流低下・逆方向への移動・enable の切り替えでは限界を解除しない。
+- `~/zero_lift` では、検出済みの限界も新しい原点へ座標変換する。ノードを再起動すると記録は消える。
+- 電流がしきい値未満に戻る、指令方向が変わる、またはフィードバックが
+  `lift.feedback_timeout` より長く途切れると、継続時間の計測をやり直す。時間は単調時計で測る。
+- `~/state` の `lift_current` [A]、`lift_upper_limited` / `lift_lower_limited`、
+  `lift_upper_limit` / `lift_lower_limit` [m] で状態を確認できる。
+  `lift_feedback=false` のとき電流表示は古い値であり、電流保護は判定できない。
+
+これは ROS 経由のフィードバックによる保護で、実機 ESC の停止を必ず防げる保証ではない。
+停止・保持・逆方向への退避は実機で確認すること。CI では短いピーク、継続時間、通信断、再指令拒否、
+両側の制限、左右の逆回転、アクションの失敗通知、停止時のボード指令と退避を疑似フィードバックで検証する。
 
 ## 未確認のこと
 

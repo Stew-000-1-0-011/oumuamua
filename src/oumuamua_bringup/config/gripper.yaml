@@ -33,6 +33,11 @@
       gear_ratio: 36.0
       meters_per_output_revolution: 0.0942478   # 2π × 0.015 m
       feedback_timeout: 0.2
+      # 実測電流の絶対値がこの値以上のまま継続したら、その方向の限界を記録して停止。
+      # 暫定値。通常の昇降・荷重での電流と、ESC が停止するまでの時間に合わせて実機で調整する。
+      # gripper0 / gripper1 の lift 以下で個別に上書き可能。正の実数で指定する。
+      overcurrent_threshold: 8.0   # [A] C610 の電流フィードバックから換算
+      overcurrent_duration: 0.2    # [s] 瞬間的な起動電流では止めない
       min_height: 0.0
       max_height: 0.85
       # 初めて動かすので遅めに (ロータで約 1100 rpm)

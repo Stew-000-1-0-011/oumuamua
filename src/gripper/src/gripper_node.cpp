@@ -41,6 +41,7 @@
 
 #include "gripper/action/move_lift.hpp"
 #include "gripper/lift.hpp"
+#include "gripper/current_guard.hpp"
 #include "gripper/msg/gripper_state.hpp"
 #include "gripper/srv/set_lift_position.hpp"
 
@@ -83,6 +84,14 @@ namespace {
 			this->settle_time_ = this->declare_parameter<double>("lift.settle_time");
 			this->timeout_margin_ = this->declare_parameter<double>("lift.timeout_margin");
 			this->feedback_timeout_ = this->declare_parameter<double>("lift.feedback_timeout");
+			this->current_guard_.emplace(
+				this->declare_parameter<double>("lift.overcurrent_threshold"),
+				this->declare_parameter<double>("lift.overcurrent_duration"), this->feedback_timeout_);
+			if (!std::isfinite(this->target_scale_) || this->target_scale_ == 0.0
+				|| !std::isfinite(this->gear_ratio_) || this->gear_ratio_ <= 0.0
+				|| !std::isfinite(this->meters_per_output_revolution_) || this->meters_per_output_revolution_ <= 0.0) {
+				throw std::invalid_argument("lift current protection requires a valid target scale, gear ratio and height feedback scale");
+			}
 			this->config_repeat_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.config_repeat"));
 			this->positions_ = this->declare_parameter<std::vector<double>>("lift.positions");
 			this->position_names_ = this->declare_parameter<std::vector<std::string>>("lift.position_names");
@@ -183,6 +192,7 @@ namespace {
 		// ---------------------------------------------------------------- 昇降
 
 		void set_lift_enabled(const bool enabled) {
+			this->current_guard_->reset_timer();
 			this->lift_enabled_ = enabled;
 			this->config_sent_ = 0;
 			this->send_mode(enabled ? mode_position : mode_disable);
@@ -197,11 +207,13 @@ namespace {
 		/// ボードには原点を決める命令が無く、位置制御を有効にした位置を 0 とするので、無効 -> 有効を送り直す。
 		/// 無効のときは、次に有効にした位置が 0 になる
 		void zero_lift() {
+			this->current_guard_->shift_origin(this->measured_height());
 			this->abort_goal("lift zeroed");
 			this->stop_move();
 			this->ramp_ = gripper::Ramp{0.0};
 			this->counter_.reset();
 			this->last_feedback_.reset();
+			this->board_zero_target_ = 0.0;
 			if (this->lift_enabled_) {
 				this->send_mode(mode_disable);
 				this->send_mode(mode_position);
@@ -210,6 +222,11 @@ namespace {
 		}
 
 		void send_mode(const std::uint8_t mode) {
+			// Position mode resets both the firmware integrator and its rotor origin.
+			// Keep our physical height coordinates across that reset.
+			if (mode == mode_position && this->feedback_valid()) {
+				this->board_zero_target_ = this->target_scale_ * this->measured_height() + this->target_offset_;
+			}
 			robomas_plugins::msg::RobomasFrame frame{};
 			frame.motor = static_cast<std::uint8_t>(this->motor_ - 1);
 			frame.c620 = this->c620_;
@@ -230,26 +247,59 @@ namespace {
 		}
 
 		void on_can_rx(const robomas_plugins::msg::Frame& m) {
+			if (m.is_rtr || m.is_extended || m.is_error) {
+				return;
+			}
 			const std::array<std::uint8_t, 8> data{m.data[0], m.data[1], m.data[2], m.data[3], m.data[4], m.data[5], m.data[6], m.data[7]};
 			const auto fb = gripper::parse_feedback(m.id, m.dlc, data, this->motor_);
 			if (!fb) {
 				return;
 			}
 			this->counter_.update(fb->angle);
-			this->last_feedback_ = this->now();
+			const auto now = gripper::CurrentGuard::Clock::now();
+			this->last_feedback_ = now;
+			this->lift_current_ = gripper::current_amps(fb->current, this->c620_);
+			const double actual = this->measured_height();
+			// Use height direction (not raw rotor/current polarity: the two lifts are mirrored).
+			const double error = this->ramp_.position() - actual;
+			const int direction = this->lift_enabled_ ? ((error > 1e-6) - (error < -1e-6)) : 0;
+			const int stopped = this->current_guard_->sample(this->lift_current_, direction, actual, now);
+			if (stopped != 0) {
+				this->abort_goal("lift overcurrent: travel limit detected");
+				this->stop_move();
+				this->ramp_ = gripper::Ramp{actual};
+				// Holding the old command would continue pushing into the end stop.
+				// Reinitialize position control to remove stored PI effort, then hold here.
+				this->send_mode(mode_position);
+				this->config_sent_ = this->config_repeat_;
+				this->publish_lift_target(actual);
+				RCLCPP_ERROR(this->get_logger(), "lift overcurrent %.2f A: blocked %s at %.4f m",
+					this->lift_current_, stopped > 0 ? "upward" : "downward", actual);
+			}
 		}
 
 		auto feedback_valid() -> bool {
 			return this->counter_.valid() && this->meters_per_output_revolution_ != 0.0 && this->last_feedback_
-				&& (this->now() - *this->last_feedback_).seconds() <= this->feedback_timeout_;
+				&& std::chrono::duration<double>(gripper::CurrentGuard::Clock::now() - *this->last_feedback_).count()
+					<= this->feedback_timeout_;
+		}
+
+		auto measured_height() const -> double {
+			const double sign = this->target_scale_ < 0.0 ? -1.0 : 1.0;
+			return sign * this->counter_.revolutions() / this->gear_ratio_ * this->meters_per_output_revolution_;
+		}
+
+		void publish_lift_target(const double height) {
+			robomas_plugins::msg::RobomasTarget target{};
+			target.target = static_cast<float>(this->target_scale_ * height + this->target_offset_ - this->board_zero_target_);
+			this->target_pub_->publish(target);
 		}
 
 		/// 今の高さ [m]。フィードバックが無ければ送っている指令
 		auto height() -> double {
 			if (this->feedback_valid()) {
 				// ロータは目標と同じ向きに数える: target_scale が負なら、高さが増えるとロータの回転は減る
-				const double sign = this->target_scale_ < 0.0 ? -1.0 : 1.0;
-				return sign * this->counter_.revolutions() / this->gear_ratio_ * this->meters_per_output_revolution_;
+				return this->measured_height();
 			}
 			return this->ramp_.position();
 		}
@@ -322,8 +372,13 @@ namespace {
 				res.message = "index " + std::to_string(req.index) + " is out of lift.positions (size "
 					+ std::to_string(this->positions_.size()) + ")";
 			} else {
-				this->abort_goal("preempted by set_lift_position");
 				const double goal = this->positions_[static_cast<std::size_t>(req.index)];
+				if (!this->feedback_valid() || !this->current_guard_->permits(goal)) {
+					res.success = false;
+					res.message = !this->feedback_valid() ? "motor feedback is unavailable" : "goal is beyond an overcurrent travel limit";
+					return;
+				}
+				this->abort_goal("preempted by set_lift_position");
 				this->start_move(goal, req.index);
 				res.success = true;
 				res.message = "moving to position " + this->position_label(req.index) + ": " + std::to_string(goal) + " m";
@@ -345,13 +400,26 @@ namespace {
 			if (!std::isfinite(goal.height)) {
 				return rclcpp_action::GoalResponse::REJECT;
 			}
+			if (!this->feedback_valid()
+				|| !this->current_guard_->permits(std::clamp(goal.height, this->min_height_, this->max_height_))) {
+				return rclcpp_action::GoalResponse::REJECT;
+			}
 			return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 		}
 
 		void on_accepted(const std::shared_ptr<GoalHandle> handle) {
-			this->abort_goal("preempted by a new goal");
 			const double requested = handle->get_goal()->height;
 			const double goal = std::clamp(requested, this->min_height_, this->max_height_);
+			// A CAN callback may have tripped the guard since on_goal accepted this request.
+			if (!this->lift_enabled_ || !this->feedback_valid() || !this->current_guard_->permits(goal)) {
+				auto result = std::make_shared<MoveLift::Result>();
+				result->reached = false;
+				result->height = this->height();
+				result->message = "lift unavailable or goal blocked by overcurrent travel limit";
+				handle->abort(result);
+				return;
+			}
+			this->abort_goal("preempted by a new goal");
 			if (goal != requested) {
 				RCLCPP_WARN(this->get_logger(), "move_lift: %.3f m is out of range; going to %.3f m", requested, goal);
 			}
@@ -417,9 +485,7 @@ namespace {
 		void on_timer() {
 			if (this->lift_enabled_) {
 				const double command = this->ramp_.step(this->dt_, this->max_speed_);
-				robomas_plugins::msg::RobomasTarget target{};
-				target.target = static_cast<float>(this->target_scale_ * command + this->target_offset_);
-				this->target_pub_->publish(target);
+				this->publish_lift_target(command);
 			}
 			this->cancel_goal_if_requested();
 			this->update_goal(this->update_motion());
@@ -437,6 +503,11 @@ namespace {
 			state.lift_moving = this->moving_;
 			state.lift_arrived = this->arrived_;
 			state.lift_feedback = this->feedback_valid();
+			state.lift_current = this->lift_current_;
+			state.lift_upper_limited = this->current_guard_->upper().has_value();
+			state.lift_lower_limited = this->current_guard_->lower().has_value();
+			state.lift_upper_limit = this->current_guard_->upper().value_or(this->max_height_);
+			state.lift_lower_limit = this->current_guard_->lower().value_or(this->min_height_);
 			state.suction_on = this->suction_on_;
 			state.suction_target = current.data;
 			this->state_pub_->publish(state);
@@ -471,7 +542,10 @@ namespace {
 		int config_sent_{0};
 		gripper::Ramp ramp_{0.0};
 		gripper::RotorCounter counter_{};
-		std::optional<rclcpp::Time> last_feedback_{};
+		std::optional<gripper::CurrentGuard::TimePoint> last_feedback_{};
+		std::optional<gripper::CurrentGuard> current_guard_{};
+		double lift_current_{};
+		double board_zero_target_{};
 		std::shared_ptr<GoalHandle> goal_handle_{};
 		bool moving_{false};
 		bool arrived_{false};
