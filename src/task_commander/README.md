@@ -68,7 +68,8 @@ PICKでは、共有の `footprints/raised.yaml` / `lowered.yaml` を+pi/2でbase
 
 PICKの昇降には取り消し可能な既存 `gripper/action/MoveLift` を使う。
 高さ・許容差はlaunchが実際の `gripper_params` の共通/個別 `lift.positions` / `tolerance` から解決する。
-`carry - pick` は箱・実物の壁の高さ+余裕より大きい必要があり、満たさなければ起動設定を拒否する。
+`carry - pick` からpick/carry双方の高さ許容差を差し引いても、箱・実物の壁の高さ+余裕を確保する必要があり、満たさなければ起動設定を拒否する。
+棚と外周に対しては、昇降を上げた移動でも腕を含む全下形状の掃引を確認する。
 実機は新しいCANフィードバックと目標高さへの到達を確認する。明示した `sim:=true` のみ指令値による模擬到達を許可する。
 自動回収後の昇降目標は高さ指定なので、状態の `lift_position` は -1 となり得る。
 

@@ -112,10 +112,30 @@ void test_uncertain_box_remains_on_floor() {
     check(pickup_stage_clearance(layout,field,geometry,settings,req,{{0,0,0}},true,false)>.02,
           "confirmed delivered box can leave floor obstacles");
 }
+
+void test_raised_arm_still_clears_shelf_and_bounds() {
+    const Box shelf{.3,.3,.5,.5};
+    Field field{{-2,-2,2,2},{shelf},{shelf}};
+    PickupLayout layout{{1.5},1.5,.1};
+    PickupGeometry geometry{square(.05),{{-.05,-.05},{.7,-.05},{.7,.05},{-.05,.05}},{{.5,-.05,.7,.05}}};
+    PickupRequest req{{0,0,0},0,0,{.6,0},{false}};
+    PickupSettings settings;
+    const std::vector<Pose2> path{{0,0,0},{.001,0,std::numbers::pi/2}};
+    check(shape_sweep_clearance(field,geometry.lowered,{path.front()})>.02
+          &&shape_sweep_clearance(field,geometry.lowered,{path.back()})>.02,
+          "full arm is clear at both shelf sweep endpoints");
+    check(pickup_stage_clearance(layout,field,geometry,settings,req,path,false,true)<.02,
+          "raised arm cannot sweep through a tall shelf");
+    field.tall_obstacles.clear();
+    check(pickup_stage_clearance(layout,field,geometry,settings,req,path,false,true)>.02,
+          "raised arm can pass above a classified low obstacle");
+    check(pickup_stage_clearance(layout,field,geometry,settings,req,{{1.5,0,0}},false,true)<.02,
+          "raised arm cannot overhang the field boundary");
+}
 }
 
 int main() {
-    test_layout();test_polygon_distance();test_contact_region();test_planner();test_neighbour_and_tool_side();test_uncertain_box_remains_on_floor();
+    test_layout();test_polygon_distance();test_contact_region();test_planner();test_neighbour_and_tool_side();test_uncertain_box_remains_on_floor();test_raised_arm_still_clears_shelf_and_bounds();
     if(!failures)std::cout<<"pickup geometry/planner tests passed\n";
     return failures?1:0;
 }

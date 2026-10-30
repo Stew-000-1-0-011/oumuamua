@@ -74,7 +74,7 @@
     "box": 0,
     "gripper": 0,
     "valid": true,
-    "clearance": 0.0200354680971
+    "clearance": 0.0200102229194
   },
   {
     "scenario": 1,
@@ -95,14 +95,14 @@
     "box": 1,
     "gripper": 1,
     "valid": true,
-    "clearance": 0.10812331378
+    "clearance": 0.0465756627689
   },
   {
     "scenario": 1,
     "box": 2,
     "gripper": 0,
     "valid": true,
-    "clearance": 0.0976793166136
+    "clearance": 0.0279962424351
   },
   {
     "scenario": 1,
@@ -144,7 +144,7 @@
     "box": 0,
     "gripper": 0,
     "valid": true,
-    "clearance": 0.0200354680971
+    "clearance": 0.0200102229194
   },
   {
     "scenario": 2,

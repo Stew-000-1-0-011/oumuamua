@@ -9,6 +9,8 @@ int main() {
     Field field;std::size_t n;
     std::cin>>field.bounds.xmin>>field.bounds.ymin>>field.bounds.xmax>>field.bounds.ymax>>n;
     for(std::size_t i=0;i<n;++i){Box b;std::cin>>b.xmin>>b.ymin>>b.xmax>>b.ymax;field.obstacles.push_back(b);}
+    std::cin>>n;
+    for(std::size_t i=0;i<n;++i){Box b;std::cin>>b.xmin>>b.ymin>>b.xmax>>b.ymax;field.tall_obstacles.push_back(b);}
     PickupLayout layout;std::cin>>n;layout.x.resize(n);for(auto& x:layout.x)std::cin>>x;std::cin>>layout.y>>layout.size;
     PickupGeometry geometry;
     for(auto* polygon:{&geometry.raised,&geometry.lowered}) {

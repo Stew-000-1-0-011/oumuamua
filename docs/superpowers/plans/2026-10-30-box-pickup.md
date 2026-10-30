@@ -1,6 +1,6 @@
 # Box Pickup Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** field.yamlに設定した5箱の初期x座標から、実形状で検査した箱回収を実行する。
 
@@ -34,10 +34,10 @@
 
 **Interfaces:** `PickupLayout` stores stable-ID x coordinates, common y and box size and validates the arrangement against the field. `PickupPlan` contains raised transit poses, lowered approach poses and raised retreat poses. `plan_pickup(...)` consumes current pose, selected tool offset, available boxes, upper/lower polygons and configured candidate yaw/transit/standoff/margins, returning a valid plan or a reason. No actuator or memory side effects occur while planning.
 
-- [ ] Write failing tests for stable IDs, invalid layouts, desired tool alignment, both tools, wall-end cases, neighboring boxes and position/yaw sweep violations. Verify target contact exemption is confined to the selected pad; other lower parts and upper chassis stay checked.
-- [ ] Implement exact polygon/rectangle checks and conservative interpolation validation matching `FollowPath` unnamed-goal shortest-yaw interpolation. Preserve the existing circle geometry interface for other tasks.
-- [ ] Generate preferred-yaw and offset-yaw candidates; check direct and outer-lane transit, outward +y standoff, final approach and retreat. Reject without side effects when none is safe.
-- [ ] Run standalone C++ pickup and existing geometry tests to success, using actual supplied shapes in integration fixtures.
+- [x] Write failing tests for stable IDs, invalid layouts, desired tool alignment, both tools, wall-end cases, neighboring boxes and position/yaw sweep violations. Verify target contact exemption is confined to the selected pad; other lower parts and upper chassis stay checked.
+- [x] Implement exact polygon/rectangle checks and conservative interpolation validation matching `FollowPath` unnamed-goal shortest-yaw interpolation. Preserve the existing circle geometry interface for other tasks.
+- [x] Generate preferred-yaw and offset-yaw candidates; check direct and outer-lane transit, outward +y standoff, final approach and retreat. Reject without side effects when none is safe.
+- [x] Run standalone C++ pickup and existing geometry tests to success, using actual supplied shapes in integration fixtures.
 
 ## Task 2: 回収実行・状態・設定の接続
 
@@ -45,14 +45,14 @@
 
 **Interfaces:** Existing `RunTask` PICK IDs and `/task_commander/state` holding/picked syntax stay compatible. Geometry comes from shared footprint YAMLs transformed at startup, with resolved paths/point arrays supplied through bringup. Configuration adds preferred yaw alternatives and outer-lane position; tool offsets remain calibration inputs.
 
-- [ ] Write failing state/execution tests for holding rejection, stale feedback, suction-before/after failure, uncertain request result, carry failure, retreat failure and cancel at stage boundaries.
-- [ ] Integrate Task 1 preflight before any actuator commands. Execute all-upper transit, selected clear/approach, pick/suction/carry and retreat in order, checking fresh confirmations and failures.
-- [ ] Keep picked/held/uncertain accounting authoritative in task_commander; publish compatible unavailable states for failure recovery and require explicit reset after physical reconciliation.
-- [ ] Configure five initial x values and document shared-field restart, stable numbering and actual tool/lift calibration. Keep controller protocol unchanged; verify it receives five buttons and compatible state.
-- [ ] Run pickup/state/geometry tests plus Python slalom and C++ trajectory regressions. Run ROS integration/CI where available and state environment limits if unavailable.
+- [x] Write failing state/execution tests for holding rejection, stale feedback, suction-before/after failure, uncertain request result, carry failure, retreat failure and cancel at stage boundaries.
+- [x] Integrate Task 1 preflight before any actuator commands. Execute all-upper transit, selected clear/approach, pick/suction/carry and retreat in order, checking fresh confirmations and failures.
+- [x] Keep picked/held/uncertain accounting authoritative in task_commander; publish compatible unavailable states for failure recovery and require explicit reset after physical reconciliation.
+- [x] Configure five initial x values and document shared-field restart, stable numbering and actual tool/lift calibration. Keep controller protocol unchanged; verify it receives five buttons and compatible state.
+- [x] Run pickup/state/geometry tests plus Python slalom and C++ trajectory regressions. Run ROS integration/CI where available and state environment limits if unavailable.
 
 ## Task 3: 経路図・最終レビュー・リモート反映
 
-- [ ] Produce example pickup plan diagrams and record valid/rejected combinations for the configured five positions.
-- [ ] Independently review final changes and address material findings with regression tests.
-- [ ] Commit implementation and tests, preserve concurrent upstream changes, and publish a separate reviewable branch/PR based on the slalom changes.
+- [x] Produce example pickup plan diagrams and record valid/rejected combinations for the configured five positions.
+- [x] Independently review final changes and address material findings with regression tests.
+- [x] Commit implementation and tests, preserve concurrent upstream changes, and publish a separate reviewable branch/PR based on the slalom changes.

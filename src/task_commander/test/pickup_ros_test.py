@@ -51,16 +51,18 @@ class Robot(Node):
         self.mode = ''
         self.feedback = True
         self.moves = self.lifts = 0
+        self.lift_canceled = False
         self.state = ''
         self.odom = self.create_publisher(Odometry, '/state_estimator/odom', 10)
         self.grippers = [self.create_publisher(GripperState, f'/gripper{i}/state', 10) for i in range(2)]
-        self.services = []
+        self.suction_services = []
         self.actions = []
         for i in range(2):
-            self.services.append(self.create_service(SetBool, f'/gripper{i}/set_suction',
+            self.suction_services.append(self.create_service(SetBool, f'/gripper{i}/set_suction',
                 lambda req, res, i=i: self.set_suction(i, req, res), callback_group=self.group))
             self.actions.append(ActionServer(self, MoveLift, f'/gripper{i}/move_lift',
-                lambda goal, i=i: self.lift(i, goal), callback_group=self.group))
+                lambda goal, i=i: self.lift(i, goal),
+                cancel_callback=lambda _: CancelResponse.ACCEPT, callback_group=self.group))
         self.actions.append(ActionServer(self, FollowPath, '/path_follower/follow', self.move,
                                         cancel_callback=lambda _: CancelResponse.ACCEPT, callback_group=self.group))
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -71,12 +73,26 @@ class Robot(Node):
 
     def set_suction(self, i, request, response):
         self.suction[i] = request.data
+        if self.mode == 'suction_response_lost':
+            time.sleep(2.3) # Actuator applied the request; the task's 2 s service wait expires.
         response.success = True
         return response
 
     def lift(self, i, goal):
         self.lifts += 1
         result = MoveLift.Result()
+        if self.mode == 'cancel_lift':
+            end = time.monotonic()+3
+            while not goal.is_cancel_requested and time.monotonic()<end:
+                time.sleep(.01)
+            self.lift_canceled = goal.is_cancel_requested
+            if self.lift_canceled:
+                goal.canceled()
+            else:
+                goal.abort()
+            result.reached = False
+            result.height = self.heights[i]
+            return result
         if self.mode == 'carry_failure' and self.suction[i] and goal.request.height == .18:
             result.reached = False
             result.height = self.heights[i]
@@ -93,8 +109,11 @@ class Robot(Node):
     def move(self, goal):
         self.moves += 1
         result = FollowPath.Result()
-        if self.mode == 'drop_lift_feedback':
-            self.feedback = False
+        if self.mode in ('drop_lift_feedback', 'stale_during_motion'):
+            if self.mode == 'drop_lift_feedback':
+                self.feedback = False
+            else:
+                self.mode = 'stale_odom'
             self.publish()
             end = time.monotonic()+.5
             while not goal.is_cancel_requested and time.monotonic()<end:
@@ -105,7 +124,7 @@ class Robot(Node):
                 goal.abort()
             result.success = False
             return result
-        if self.mode == 'transit_failure':
+        if self.mode == 'transit_failure' or (self.mode == 'retreat_failure' and self.suction[0]):
             result.success = False
             result.message = 'synthetic transit failure'
             goal.abort()
@@ -191,6 +210,7 @@ class PickupRosTest(unittest.TestCase):
             time.sleep(.03)
         time.sleep(.1)
         self.robot.moves = self.robot.lifts = 0
+        self.robot.lift_canceled = False
 
     def pick(self, gripper=0, box=4):
         goal = RunTask.Goal(); goal.type = 0; goal.gripper = gripper; goal.block = box
@@ -252,6 +272,42 @@ class PickupRosTest(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertFalse(self.robot.suction[0])
         self.assertNotIn('picked blocks: 4', self.robot.state)
+
+    def test_stale_odometry_during_transit_cancels_before_suction(self):
+        self.robot.mode = 'stale_during_motion'
+        self.assertFalse(self.pick().success)
+        self.assertFalse(self.robot.suction[0])
+
+    def test_suction_applied_without_response_interlocks_load(self):
+        self.robot.mode = 'suction_response_lost'
+        self.assertFalse(self.pick().success)
+        self.assertTrue(self.robot.suction[0])
+        self.wait_state('uncertain grippers: gripper0')
+        self.assertEqual(self.robot.moves, 2) # transit and approach; no retreat
+        self.assertAlmostEqual(self.robot.heights[0], 0.) # no carry after missing response
+
+    def test_retreat_failure_keeps_confirmed_load(self):
+        self.robot.mode = 'retreat_failure'
+        self.assertFalse(self.pick().success)
+        self.wait_state('gripper0=yes')
+        self.assertIn('picked blocks: 4', self.robot.state)
+        self.assertNotIn('uncertain grippers: gripper0', self.robot.state)
+        self.assertAlmostEqual(self.robot.heights[0], .18)
+
+    def test_cancellation_stops_active_lift_before_transit(self):
+        self.robot.mode = 'cancel_lift'
+        goal = RunTask.Goal(); goal.type = 0; goal.gripper = 0; goal.block = 4
+        handle = wait(self.robot.tasks.send_goal_async(goal))
+        self.assertTrue(handle.accepted)
+        end = time.monotonic()+3
+        while not self.robot.lifts and time.monotonic()<end:
+            time.sleep(.01)
+        self.assertEqual(self.robot.lifts, 1)
+        wait(handle.cancel_goal_async())
+        self.assertFalse(wait(handle.get_result_async()).result.success)
+        self.assertTrue(self.robot.lift_canceled)
+        self.assertEqual(self.robot.moves, 0)
+        self.assertFalse(self.robot.suction[0])
 
 
 if __name__ == '__main__':

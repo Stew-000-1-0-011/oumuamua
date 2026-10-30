@@ -54,6 +54,13 @@ class PickupParametersTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.load(gripper=p)
 
+    def test_carry_clearance_includes_height_tolerance(self):
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'gripper.yaml'
+            p.write_text('/**:\n  ros__parameters:\n    lift:\n      positions: [0.0, 0.09, 0.17]\n      tolerance: 0.005\n')
+            with self.assertRaises(ValueError):
+                self.load(gripper=p)
+
 
 if __name__ == '__main__':
     unittest.main()

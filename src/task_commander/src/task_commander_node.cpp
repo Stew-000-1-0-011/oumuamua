@@ -105,6 +105,7 @@ namespace {
 				throw std::invalid_argument("field.bounds and field.shelf must be [xmin, ymin, xmax, ymax]");
 			}
 			this->field_.bounds = Box{bounds[0], bounds[1], bounds[2], bounds[3]};
+			this->field_.tall_obstacles = shelf;
 			// 棚も壁と同じく避ける
 			walls.push_back(shelf.front());
 			this->walls_ = walls;
@@ -150,7 +151,7 @@ namespace {
 			this->pickup_geometry_.lowered = polygon(this->declare_parameter<std::vector<double>>("pick.lowered_footprint"));
 			this->pickup_geometry_.contacts = task_commander::boxes_from_flat(this->declare_parameter<std::vector<double>>("pick.contact_regions"), "pick.contact_regions");
 			this->pickup_layout_ = {this->blocks_x_,this->blocks_y_,this->block_size_};
-			if (const auto valid=task_commander::validate_layout(this->pickup_layout_, {this->field_.bounds,this->walls_}); !valid)
+			if (const auto valid=task_commander::validate_layout(this->pickup_layout_, {this->field_.bounds,this->walls_,this->field_.tall_obstacles}); !valid)
 				throw std::invalid_argument(valid.error());
 			if (!std::isfinite(this->grip_time_) || this->grip_time_<0 || !std::isfinite(this->pickup_alignment_tolerance_) || this->pickup_alignment_tolerance_<=0)
 				throw std::invalid_argument("invalid pickup grip time or alignment tolerance");
@@ -495,7 +496,7 @@ namespace {
 				} else sweep.push_back(p);
 			}
 			const auto request=this->pickup_request(gripper,block,*here);
-			const auto gap=task_commander::pickup_stage_clearance(this->pickup_layout_,{this->field_.bounds,this->walls_},
+			const auto gap=task_commander::pickup_stage_clearance(this->pickup_layout_,{this->field_.bounds,this->walls_,this->field_.tall_obstacles},
 			    this->pickup_geometry_,this->pickup_settings_,request,sweep,lowered,captured);
 			if (gap<this->min_clearance_) return std::unexpected{std::format("pickup stage clearance {:.3f} m below {:.3f} m",gap,this->min_clearance_)};
 			if (sweep.size()==1) return {};
@@ -528,7 +529,7 @@ namespace {
 			const auto pose=this->pickup_odom();
 			if (!pose) return std::unexpected{"no fresh field pose before lowering"};
 			const auto request=this->pickup_request(gripper,block,*pose);
-			const double gap=task_commander::pickup_stage_clearance(this->pickup_layout_,{this->field_.bounds,this->walls_},
+			const double gap=task_commander::pickup_stage_clearance(this->pickup_layout_,{this->field_.bounds,this->walls_,this->field_.tall_obstacles},
 			    this->pickup_geometry_,this->pickup_settings_,request,{*pose},true,false);
 			if (gap<this->min_clearance_) return std::unexpected{"actual pose is unsafe for lowering"};
 			if (align) {
@@ -691,7 +692,7 @@ namespace {
 			}
 			const auto here=this->pickup_odom();
 			if(!here)return std::unexpected{"no fresh field-frame pose for pickup"};
-			const auto plan=task_commander::plan_pickup(this->pickup_layout_,{this->field_.bounds,this->walls_},
+			const auto plan=task_commander::plan_pickup(this->pickup_layout_,{this->field_.bounds,this->walls_,this->field_.tall_obstacles},
 			    this->pickup_geometry_,this->pickup_settings_,this->pickup_request(gripper,block,*here));
 			if(!plan)return std::unexpected{plan.error()};
 			this->step(std::format("{}: pickup plan clearance {:.3f} m",g.name,plan->clearance));

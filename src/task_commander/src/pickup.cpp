@@ -76,6 +76,7 @@ Field padded(Field field,const PickupSettings& s) {
     // Fixed obstacles (walls and shelf) are expanded conservatively; notes
     // are appended afterwards, with their independent driving margin.
     for(auto& b:field.obstacles) { b.xmin-=s.wall_padding;b.ymin-=s.wall_padding;b.xmax+=s.wall_padding;b.ymax+=s.wall_padding; }
+    for(auto& b:field.tall_obstacles) { b.xmin-=s.wall_padding;b.ymin-=s.wall_padding;b.xmax+=s.wall_padding;b.ymax+=s.wall_padding; }
     return field;
 }
 std::vector<Pose2> with_start(Pose2 start,const std::vector<Pose2>& points) {
@@ -164,6 +165,9 @@ auto pickup_stage_clearance(const PickupLayout& layout,const Field& fixed,const 
         if(i!=req.block)others.obstacles.push_back(layout.box(i));
     }
     double gap=shape_sweep_clearance(all,g.raised,path);
+    // Raising only clears low walls/notes. Arms and any held box still need
+    // their full planar envelope against the tall shelf and outer boundary.
+    gap=std::min(gap,shape_sweep_clearance({others.bounds,others.tall_obstacles},g.lowered,path));
     if(lowered) {
         gap=std::min(gap,shape_sweep_clearance(others,g.lowered,path));
         Field target{others.bounds,{layout.box(req.block)}};

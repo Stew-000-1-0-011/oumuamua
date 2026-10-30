@@ -50,8 +50,9 @@ def pickup_parameters(task_file, gripper_file, raised_file, lowered_file, requir
         tolerance = float(lift.get('tolerance', .005))
         if not all(math.isfinite(v) for v in selected) or not math.isfinite(tolerance) or tolerance <= 0:
             raise ValueError(f'{name}: invalid lift heights or tolerance')
-        if selected[1] <= selected[0] or selected[2]-selected[0] < obstacle_height+vertical_margin:
-            raise ValueError(f'{name}: clear must exceed pick; carry must clear notes/walls plus margin')
+        # Pick may settle high and carry low, each within the accepted error.
+        if selected[1]-selected[0] <= 2*tolerance or selected[2]-selected[0]-2*tolerance+1e-9 < obstacle_height+vertical_margin:
+            raise ValueError(f'{name}: clear must exceed pick; carry must clear notes/walls plus margin and height tolerances')
         heights.extend(selected)
         tolerances.append(tolerance)
     yaw = float(task['pick'].get('footprint_yaw', math.pi/2))

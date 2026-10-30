@@ -29,6 +29,7 @@ def main():
     obstacles = field['walls'] + field['shelf']
     contacts = pick['contact_regions']
     values = [*field['bounds'], len(obstacles)//4, *obstacles,
+              len(field['shelf'])//4, *field['shelf'],
               len(field['notes_x']), *field['notes_x'], field['notes_y'], field['note_size'],
               len(upper)//2, *upper, len(lower)//2, *lower,
               len(contacts)//4, *contacts,
