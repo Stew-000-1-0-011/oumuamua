@@ -1,0 +1,49 @@
+name: ROS build and test
+
+on:
+  push:
+    branches: [main, feat/harite]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build ROS development image
+        run: docker build --progress=plain -f container/Containerfile -t oumuamua-ci .
+      - name: Build workspace
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/ws" -e CMAKE_BUILD_PARALLEL_LEVEL=2 oumuamua-ci bash -ec '
+            source /opt/ros/$ROS_DISTRO/setup.bash
+            colcon build --executor sequential --event-handlers console_direct+
+          '
+      - name: Run tests
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/ws" oumuamua-ci bash -ec '
+            source /opt/ros/$ROS_DISTRO/setup.bash
+            source /ws/install/setup.bash
+            colcon test --executor sequential --event-handlers console_direct+ --return-code-on-test-failure
+          '
+      - name: Report test results
+        if: always()
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/ws" oumuamua-ci bash -ec '
+            source /opt/ros/$ROS_DISTRO/setup.bash
+            colcon test-result --verbose
+          '
+      - name: Upload build and test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: colcon-logs
+          path: log/
+          if-no-files-found: ignore
+
