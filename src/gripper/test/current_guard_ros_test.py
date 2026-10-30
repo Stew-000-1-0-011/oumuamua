@@ -21,10 +21,11 @@ sys.argv = sys.argv[:1]
 class CurrentProtectionTest(unittest.TestCase):
     def test_mirrored_lifts(self):
         for name, motor, sign in [("gripper0", 2, 1), ("gripper1", 1, -1)]:
-            with self.subTest(lift=name):
-                self.exercise(name, motor, sign)
+            for coincident in (False, True):
+                with self.subTest(lift=name, coincident_goal=coincident):
+                    self.exercise(name, motor, sign, coincident)
 
-    def exercise(self, name, motor, sign):
+    def exercise(self, name, motor, sign, coincident):
         # Isolate this fake motor from other ROS tests / robot topics.
         os.environ["ROS_DOMAIN_ID"] = str(100 + os.getpid() % 100)
         rclpy.init()
@@ -35,6 +36,7 @@ class CurrentProtectionTest(unittest.TestCase):
         self.modes = []
         self.angle = 0
         self.raw_current = 0
+        self.feedback_on = True
         self.motor = motor
         self.pub = node.create_publisher(Frame, "/robomas_can_rx", 100)
         subscriptions = [
@@ -59,8 +61,14 @@ class CurrentProtectionTest(unittest.TestCase):
                     self.angle = (self.angle + sign * 2000) % 8192
                     self.tick()
                 self.wait(lambda: self.state.lift_height > 0.11)
-                self.assertTrue(self.call(position, SetLiftPosition.Request(index=2)).success)
-                self.wait(lambda: self.state.lift_command > 0.14)
+                self.pump(0.15)
+                target_height = self.state.lift_height if coincident else 0.18
+                self.assertTrue(action.wait_for_server(timeout_sec=5.0))
+                initial = self.future(action.send_goal_async(MoveLift.Goal(height=target_height)))
+                self.assertTrue(initial.accepted)
+                self.wait(lambda: abs(self.state.lift_command - target_height) < 1e-6)
+                if coincident:
+                    self.assertAlmostEqual(self.state.lift_command, self.state.lift_height, places=6)
                 # A short spike must not stop the lift.
                 self.raw_current = sign * 9000
                 self.pump(0.08)
@@ -68,7 +76,7 @@ class CurrentProtectionTest(unittest.TestCase):
                 self.pump(0.15)
                 self.assertFalse(self.state.lift_upper_limited)
                 self.assertTrue(action.wait_for_server(timeout_sec=5.0))
-                active_goal = self.future(action.send_goal_async(MoveLift.Goal(height=0.18)))
+                active_goal = self.future(action.send_goal_async(MoveLift.Goal(height=target_height)))
                 self.assertTrue(active_goal.accepted)
                 action_result = active_goal.get_result_async()
                 # Stalling on the upper stop for long enough trips and recenters.
@@ -98,6 +106,18 @@ class CurrentProtectionTest(unittest.TestCase):
                 self.assertTrue(self.call(enable, SetBool.Request(data=False)).success)
                 self.assertTrue(self.call(enable, SetBool.Request(data=True)).success)
                 self.assertFalse(self.call(position, SetLiftPosition.Request(index=2)).success)
+                # Stale feedback cannot be used to reset the physical board origin.
+                self.feedback_on = False
+                self.pump(0.3)
+                self.assertFalse(self.state.lift_feedback)
+                self.pump(0.05)
+                mode_count = len(self.modes)
+                self.assertFalse(self.call(enable, SetBool.Request(data=True)).success)
+                self.pump(0.1)
+                self.assertEqual(len(self.modes), mode_count)
+                self.feedback_on = True
+                self.wait(lambda: self.state.lift_feedback)
+                self.assertFalse(self.call(position, SetLiftPosition.Request(index=2)).success)
             finally:
                 process.terminate()
                 try:
@@ -117,7 +137,8 @@ class CurrentProtectionTest(unittest.TestCase):
         frame.dlc = 8
         current = self.raw_current & 0xffff
         frame.data = [self.angle >> 8, self.angle & 255, 0, 0, current >> 8, current & 255, 0, 0]
-        self.pub.publish(frame)
+        if self.feedback_on:
+            self.pub.publish(frame)
         rclpy.spin_once(self.node, timeout_sec=0.005)
         time.sleep(0.005)
 

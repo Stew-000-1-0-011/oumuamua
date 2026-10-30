@@ -24,7 +24,12 @@ public:
 	}
 
 	// Returns +1 for an upper stop, -1 for a lower stop, otherwise 0.
+	// Current polarity is expressed in height coordinates. At zero position
+	// error, retained PI torque still identifies which stop is being pushed.
 	int sample(double current, int direction, double height, TimePoint now) {
+		if (direction == 0 && std::isfinite(current)) {
+			direction = (current > 0.0) - (current < 0.0);
+		}
 		if (!std::isfinite(current) || !std::isfinite(height) || (direction != -1 && direction != 1)
 			|| std::abs(current) < amps_) {
 			reset_timer();
@@ -60,6 +65,7 @@ public:
 	}
 	const std::optional<double>& upper() const { return upper_; }
 	const std::optional<double>& lower() const { return lower_; }
+	bool pending() const { return since_.has_value(); }
 
 private:
 	double amps_;

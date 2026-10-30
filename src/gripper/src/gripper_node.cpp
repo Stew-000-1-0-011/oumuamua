@@ -146,14 +146,19 @@ namespace {
 			this->enable_srv_ = this->create_service<std_srvs::srv::SetBool>(
 				"~/enable_lift",
 				[this](const std::shared_ptr<std_srvs::srv::SetBool::Request> req, std::shared_ptr<std_srvs::srv::SetBool::Response> res) {
-					this->set_lift_enabled(req->data);
-					res->success = true;
-					res->message = req->data ? "lift enabled (position control)" : "lift disabled";
+					res->success = this->set_lift_enabled(req->data);
+					res->message = !res->success ? "fresh motor feedback required before reinitializing position control"
+						: (req->data ? "lift enabled (position control)" : "lift disabled");
 				}
 			);
 			this->zero_srv_ = this->create_service<std_srvs::srv::Trigger>(
 				"~/zero_lift",
 				[this](const std::shared_ptr<std_srvs::srv::Trigger::Request>, std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
+					if (!this->feedback_valid()) {
+						res->success = false;
+						res->message = "fresh motor feedback required before zeroing";
+						return;
+					}
 					this->zero_lift();
 					res->success = true;
 					res->message = "lift zeroed at the current position";
@@ -191,7 +196,10 @@ namespace {
 	private:
 		// ---------------------------------------------------------------- 昇降
 
-		void set_lift_enabled(const bool enabled) {
+		auto set_lift_enabled(const bool enabled) -> bool {
+			if (enabled && this->position_initialized_ && this->counter_.valid() && !this->feedback_valid()) {
+				return false;
+			}
 			this->current_guard_->reset_timer();
 			this->lift_enabled_ = enabled;
 			this->config_sent_ = 0;
@@ -201,6 +209,7 @@ namespace {
 				this->stop_move();
 			}
 			RCLCPP_INFO(this->get_logger(), "lift %s", enabled ? "enabled (position control)" : "disabled");
+			return true;
 		}
 
 		/// 今の位置を高さ 0 にし直す (起動したときと同じ状態にする)。
@@ -214,6 +223,7 @@ namespace {
 			this->counter_.reset();
 			this->last_feedback_.reset();
 			this->board_zero_target_ = 0.0;
+			this->position_initialized_ = false;
 			if (this->lift_enabled_) {
 				this->send_mode(mode_disable);
 				this->send_mode(mode_position);
@@ -222,12 +232,18 @@ namespace {
 		}
 
 		void send_mode(const std::uint8_t mode) {
+			// After initial setup a reset needs fresh position feedback; otherwise
+			// the new firmware origin cannot be related to our height coordinates.
+			if (mode == mode_position && this->position_initialized_ && this->counter_.valid() && !this->feedback_valid()) {
+				return;
+			}
 			// Position mode resets both the firmware integrator and its rotor origin.
 			// Keep our physical height coordinates across that reset.
 			if (mode == mode_position && this->feedback_valid()) {
 				this->board_zero_target_ = this->target_scale_ * this->measured_height() + this->target_offset_;
 			}
 			robomas_plugins::msg::RobomasFrame frame{};
+			frame.header.stamp = this->now();
 			frame.motor = static_cast<std::uint8_t>(this->motor_ - 1);
 			frame.c620 = this->c620_;
 			frame.mode = mode;
@@ -236,6 +252,9 @@ namespace {
 			frame.velki = static_cast<float>(this->vel_ki_);
 			frame.poskp = static_cast<float>(this->pos_kp_);
 			this->frame_pub_->publish(frame);
+			if (mode == mode_position) {
+				this->position_initialized_ = true;
+			}
 			++this->config_sent_;
 		}
 
@@ -263,7 +282,8 @@ namespace {
 			// Use height direction (not raw rotor/current polarity: the two lifts are mirrored).
 			const double error = this->ramp_.position() - actual;
 			const int direction = this->lift_enabled_ ? ((error > 1e-6) - (error < -1e-6)) : 0;
-			const int stopped = this->current_guard_->sample(this->lift_current_, direction, actual, now);
+			const double effort = this->lift_enabled_ ? this->lift_current_ * (this->target_scale_ < 0.0 ? -1.0 : 1.0) : 0.0;
+			const int stopped = this->current_guard_->sample(effort, direction, actual, now);
 			if (stopped != 0) {
 				this->abort_goal("lift overcurrent: travel limit detected");
 				this->stop_move();
@@ -291,6 +311,7 @@ namespace {
 
 		void publish_lift_target(const double height) {
 			robomas_plugins::msg::RobomasTarget target{};
+			target.header.stamp = this->now();
 			target.target = static_cast<float>(this->target_scale_ * height + this->target_offset_ - this->board_zero_target_);
 			this->target_pub_->publish(target);
 		}
@@ -332,7 +353,7 @@ namespace {
 				return Motion::idle;
 			}
 			const auto now = this->now();
-			const bool close = this->ramp_.arrived()
+			const bool close = this->ramp_.arrived() && !this->current_guard_->pending()
 				&& (!this->feedback_valid() || std::abs(this->height() - this->ramp_.goal()) <= this->tolerance_);
 			if (close) {
 				if (!this->settled_since_) {
@@ -546,6 +567,7 @@ namespace {
 		std::optional<gripper::CurrentGuard> current_guard_{};
 		double lift_current_{};
 		double board_zero_target_{};
+		bool position_initialized_{false};
 		std::shared_ptr<GoalHandle> goal_handle_{};
 		bool moving_{false};
 		bool arrived_{false};

@@ -68,7 +68,9 @@ namespace {
 		check(near(current_amps(-8192, true), -10.0, 1e-12), "C620 current is amperes");
 		check(current_amps(-32768, false) < 0.0, "negative raw minimum does not overflow");
 		check(guard.sample(9, 1, 0.15, t) == 0, "current spike does not trip");
+		check(guard.pending(), "overload evaluation delays arrival settling");
 		check(guard.sample(7, 1, 0.15, t + 50ms) == 0, "low current resets duration");
+		check(!guard.pending(), "low current clears pending overload");
 		for (int i = 0; i < 4; ++i) {
 			check(guard.sample(-8, 1, 0.15, t + 100ms + i * 50ms) == 0, "continuous overload waits full duration");
 		}
@@ -92,6 +94,14 @@ namespace {
 		gaps.sample(std::numeric_limits<double>::quiet_NaN(), -1, 0.1, t + 450ms);
 		check(!gaps.upper() && !gaps.lower(), "discontinuous input cannot learn a limit");
 		check(!gaps.permits(std::numeric_limits<double>::quiet_NaN()), "nonfinite goals rejected");
+		CurrentGuard holding{8, 0.2, 0.1};
+		for (int i = 0; i < 4; ++i) { holding.sample(9, 0, 0.15, t + i * 50ms); }
+		check(holding.sample(9, 0, 0.15, t + 200ms) == 1,
+			"holding torque at zero position error must still detect an upper stop");
+		CurrentGuard holding_down{8, 0.2, 0.1};
+		for (int i = 0; i < 4; ++i) { holding_down.sample(-9, 0, 0.02, t + i * 50ms); }
+		check(holding_down.sample(-9, 0, 0.02, t + 200ms) == -1,
+			"holding torque in height coordinates detects a lower stop");
 		for (const double bad : {0.0, -1.0, std::numeric_limits<double>::infinity()}) {
 			bool rejected = false;
 			try { CurrentGuard invalid{bad, 0.2, 0.1}; } catch (const std::invalid_argument&) { rejected = true; }
