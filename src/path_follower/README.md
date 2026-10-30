@@ -26,7 +26,7 @@ ros2 run path_follower make_path.py route.yaml path.csv --plot preview.png
 ros2 run path_follower make_path.py route.yaml path_back.csv --reverse   # 同じ経路を逆にたどる
 ```
 
-経路の定義の書き方は `make_path.py --help` と、oumuamua_bringup の `config/paths/start_to_shelf.route.yaml` を参照。
+経路の定義の書き方は `make_path.py --help` と、oumuamua_bringup の `config/paths/slalom.route.yaml` を参照。
 
 - `corners`: 折れ線の頂点 `[x, y, 半径]`。角は半径の円弧で丸める
 - `yaw`: 始点からの道のり [m] と、そこでの機体の向き [rad]。全方向移動なので、向きは進む向きと無関係に決められる。

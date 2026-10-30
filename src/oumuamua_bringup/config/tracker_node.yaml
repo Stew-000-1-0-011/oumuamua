@@ -37,13 +37,11 @@ tracker_node:
     heading_lookahead: 0.01     # [s] 機体座標系へ回すときの yaw の先読み (制御周期の半分くらい)
 
     # --- 制限 (<= 0 で無効) ---
-    # 追従の上限。path_follower の計画 (3.0 m/s, 2.5 m/s^2, 9.42 rad/s) より、ずれを戻すぶんだけ緩くしてある。
-    # 足回り (車輪 120 rad/s = 3.5 m/s) は並進と旋回で分け合うので、両方を同時に出すと
-    # (3.3 + 10.0 * 0.2 = 5.3 m/s) 車輪の上限を超えて、足回りが頭打ちにする。角加速度は制限しない
+    # 追従の上限。どれも外してある (速さと加速は path_follower の計画で決まる)
     limits:
-      max_velocity_linear: 3.3   # [m/s]
-      max_velocity_angular: 10.0 # [rad/s]
-      max_accel_linear: 4.0      # [m/s^2]
+      max_velocity_linear: 0.0   # [m/s] 制限しない
+      max_velocity_angular: 0.0  # [rad/s] 制限しない
+      max_accel_linear: 0.0      # [m/s^2] 制限しない
       max_accel_angular: 0.0     # [rad/s^2] 制限しない
 
     # --- pose_source: odom のとき ---

@@ -46,24 +46,24 @@ tracker_node への目標 (`/tracker_node/reference`, `holonomic_tracker/msg/Tra
 起動しただけでは走らない。経路の始点に置いて、次で走り出す:
 
 ```bash
-ros2 service call /path_follower/start/start_to_shelf std_srvs/srv/Trigger   # スタート位置 -> 棚の正面
-ros2 service call /path_follower/start/shelf_to_start std_srvs/srv/Trigger   # 棚の正面 -> スタート位置
+ros2 service call /path_follower/start/slalom_forward std_srvs/srv/Trigger   # スラロームの入口 -> 出口
+ros2 service call /path_follower/start/slalom_backward std_srvs/srv/Trigger  # スラロームの出口 -> 入口
 ros2 service call /path_follower/stop std_srvs/srv/Trigger                   # 目標を止める (tracker_node が機体を止める)
 ```
 
-経路は `src/oumuamua_bringup/config/paths/` にある。スラロームの往復 (`slalom_forward.csv`, `slalom_backward.csv`) は
-`slalom.route.yaml` から作り、task_commander が使う。`start_to_shelf.route.yaml` が定義で、そこから
-行き (`start_to_shelf.csv`) と帰り (`shelf_to_start.csv`。同じ経路を逆にたどる) を作ってある。定義を変えたら両方作り直す:
+経路は `src/oumuamua_bringup/config/paths/` にある。スラロームの往復 (`slalom_forward.csv`, `slalom_backward.csv`) だけで、
+`slalom.route.yaml` から作り、task_commander が使う (ふだんは task_commander の SLALOM_FORWARD / SLALOM_BACKWARD で走る)。
+往路と、同じ経路を逆にたどる復路を作ってある。定義を変えたら両方作り直す:
 
 ```bash
 cd src/oumuamua_bringup/config/paths
-ros2 run path_follower make_path.py start_to_shelf.route.yaml start_to_shelf.csv --plot /tmp/preview.png
-ros2 run path_follower make_path.py start_to_shelf.route.yaml shelf_to_start.csv --reverse
+ros2 run path_follower make_path.py slalom.route.yaml slalom_forward.csv --plot /tmp/preview.png
+ros2 run path_follower make_path.py slalom.route.yaml slalom_backward.csv --reverse
 ```
 
-定義にはフィールドの壁と機体の外形 (半径 0.30 m の円 + 後ろに飛び出した LiDAR) も書いてあり、
-外形が壁に `min_clearance` より近づく経路は作るのに失敗する。機体の向きは、最初の隙間から先は進む向きに合わせてある
-(機体の後ろ (LiDAR の側) を進む向きに向ける。帰りは同じ向きのまま逆にたどるので、前向きに走る)。どの経路を読むかは `config/path_follower.yaml` の `paths`。
+定義にはフィールドの壁と機体の外形 (CAD の足回り + LiDAR) も書いてあり、
+外形が壁に `min_clearance` より近づく経路は作るのに失敗する。機体は後ろ (LiDAR の側) を進む向きに向ける
+(復路は同じ向きのまま逆にたどるので、前向きに走る)。どの経路を読むかは `config/path_follower.yaml` の `paths`。
 速さの上限は `config/path_follower.yaml`。詳しくは `src/path_follower/README.md`。
 
 ## 起動

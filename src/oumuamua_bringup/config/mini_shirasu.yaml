@@ -38,7 +38,9 @@
       wkp: 1.6                # [A/(rad/s)]
       wki: 5.0                # [A/(rad/s s)]
       wb: 0.8
-      wmax: 120.0             # [rad/s] 車輪半径 0.029 m で 3.5 m/s。chassis_node.yaml の max_wheel_speed と揃える (wmax / wbase < 8)
+      # [rad/s] 実質的に外してある: モータは 24 V で無負荷約 267 rad/s (車輪半径 0.029 m で 7.7 m/s) なのでそれより上。
+      # 基板が受け付けるのは wmax / wbase < 8 (wbase 40 で 320 未満) まで
+      wmax: 300.0
       pkp: 1.5                # [1/s]
       pmax: 100.0             # [回転]
       accel_to_current: 0.01  # [A/(rad/s^2)]

@@ -37,12 +37,14 @@ chassis_node:
     # --- 実行中に変えられる ---
     base_frame: base_link       # ~/body_velocity の frame_id
     cmd_timeout: 0.2            # [s] cmd_vel がこれより来なければ目標をゼロにする
-    feedback_timeout: 0.1       # [s] 実測がこれより古い車輪があれば ~/body_velocity を出さない
+    # [s] 実測がこれより古い車輪があれば ~/body_velocity を出さない。実測は 50 Hz で届くが、
+    # 2026-10-31 の記録 (fault1) で wheel0 の Status が CAN で 25% 抜け、最長 160 ms 途切れていたので 0.2 にしてある
+    # (配線を直したら 0.1 に戻してよい)
+    feedback_timeout: 0.2
     # 車輪の制限 (<= 0 で無効)。全車輪に同じ倍率をかけるので、進む向きは変わらない
     limits:
-      # mini-shirasu の wmax と揃える。ドライバに車輪ごとに切り詰められると進む向きが歪むので、
-      # ここで全輪を同じ倍率で縮めておく。120 rad/s * 半径 0.029 m = 3.5 m/s (モータは 24 V で無負荷約 267 rad/s)
-      max_wheel_speed: 120.0
-      # 加速は計画 (path_follower) と追従 (tracker_node) で抑えるので、ここでは掛けない
-      # (掛けると追従の応答が遅れる)
+      # 外してある (速さは path_follower の計画で決まる)。モータは 24 V で無負荷約 267 rad/s (車輪半径 0.029 m で 7.7 m/s)。
+      # 車輪の速さが電源電圧で頭打ちになると、車輪ごとに切り詰められて進む向きが歪む
+      max_wheel_speed: 0.0
+      # 加速も外してある (掛けると追従の応答が遅れる)
       max_wheel_accel: 0.0
