@@ -23,7 +23,7 @@ task_commander:
 
     # --- 場所 [x, y, yaw] (TO_START は field.yaml の start_pose へ) ---
     slalom:
-      entrance: [-2.05, 0.668, 3.141592653589793]   # スタートゾーン側、境界の隙間 (y = 0.2665..1.069) の手前。config/paths/slalom.route.yaml の始点
+      entrance: [-2.05, 0.668, 3.141592653589793]   # スタートゾーン側、境界の隙間 (y = 0.02..1.069) の手前。config/paths/slalom.route.yaml の始点
       exit: [1.25, 1.273, 3.141592653589793]        # ゴールゾーン側、列 3 を抜けた所。slalom.route.yaml の終点
       forward_route: slalom_forward     # path_follower.yaml の paths にある名前
       backward_route: slalom_backward
