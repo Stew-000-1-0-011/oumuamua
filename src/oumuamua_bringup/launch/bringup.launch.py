@@ -376,7 +376,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('lidar', default_value='true', description='urg_node2 を起動する'),
         DeclareLaunchArgument(
-            'lidar_connection', default_value='serial', choices=['ether', 'serial'],
+            'lidar_connection', default_value='ether', choices=['ether', 'serial'],
             description='LiDAR の接続 (config/urg_<ether|serial>.yaml を使う)'),
         DeclareLaunchArgument(
             'lidar_x', default_value='-0.28',

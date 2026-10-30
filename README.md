@@ -75,7 +75,7 @@ ros2 launch oumuamua_bringup bringup.launch.py
 | 引数 | 既定 | 意味 |
 | --- | --- | --- |
 | `lidar` | `true` | urg_node2 を起動する (configure -> activate まで自動) |
-| `lidar_connection` | `serial` | `ether` / `serial`。`config/urg_<...>.yaml` を使う。serial は `/dev/serial/by-id/usb-Hokuyo_...` を開き、`container/run.sh` はつながっていればこれをコンテナに渡す |
+| `lidar_connection` | `ether` | `ether` / `serial`。`config/urg_<...>.yaml` を使う。ether は `192.168.0.10` (PC 側は enp2s0 を `192.168.0.15/24` 固定)。serial は `/dev/serial/by-id/usb-Hokuyo_...` を開き、`container/run.sh` はつながっていればこれをコンテナに渡す |
 | `lidar_x` | `-0.28` | base_link から見た LiDAR の取付位置 [m] (static TF `base_link -> laser`)。LiDAR は機体の後ろ側で、車輪 0 の 8 cm 先 |
 | `lidar_y` | `0.0` | 同上 (横方向の位置) |
 | `lidar_yaw` | `pi` | LiDAR の向き [rad]。機体の後ろ (-x) を向いている |
