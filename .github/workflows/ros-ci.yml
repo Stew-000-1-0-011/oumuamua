@@ -25,12 +25,16 @@ jobs:
             source /opt/ros/$ROS_DISTRO/setup.bash
             colcon build --executor sequential --event-handlers console_direct+
           '
-      - name: Run tests
+      # Build all dependencies, but test only packages maintained in this repository.
+      # Submodule tests include external style rules and physical LiDAR access.
+      - name: Test repository packages
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/ws" oumuamua-ci bash -ec '
             source /opt/ros/$ROS_DISTRO/setup.bash
             source /ws/install/setup.bash
-            colcon test --executor sequential --event-handlers console_direct+ --return-code-on-test-failure
+            colcon test --executor sequential --event-handlers console_direct+ --return-code-on-test-failure \
+              --packages-select gripper harite oumuamua_bringup oumuamua_sim \
+                path_follower state_estimator task_commander
           '
       - name: Report test results
         if: always()
