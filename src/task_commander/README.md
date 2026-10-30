@@ -15,7 +15,7 @@
 | 6 | `TO_SLALOM_EXIT` | | 昇降を全部 carry にして、スラロームの出口へ (今の位置から直線) |
 
 ```bash
-ros2 action send_goal /task_commander/run task_commander/action/RunTask "{type: 0, gripper: 0, block: 2}" --feedback   # 把持 0 でブロック 2 を回収
+ros2 action send_goal /task_commander/run task_commander/action/RunTask "{type: 0, gripper: 0, block: 4}" --feedback   # 暫定初期配置では把持 0 で箱 4 から回収
 ros2 action send_goal /task_commander/run task_commander/action/RunTask "{type: 1}"                                   # スラロームの入口へ
 ros2 action send_goal /task_commander/run task_commander/action/RunTask "{type: 3}"                                   # スラロームの往路
 ros2 action send_goal /task_commander/run task_commander/action/RunTask "{type: 5, gripper: 0, column: 1, row: 0}"    # 中央の列の 1 段目へ
