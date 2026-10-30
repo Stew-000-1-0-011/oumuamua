@@ -26,6 +26,7 @@ namespace task_commander {
 	struct Field final {
 		Box bounds{};               ///< 走れる範囲 (外周壁の内側の面)
 		std::vector<Box> obstacles; ///< 壁・棚・残っているブロックなど
+		std::vector<Box> tall_obstacles{}; ///< 昇降を上げても腕が通過できない棚など
 	};
 
 	/// 機体座標系で offset にある道具 (把持機構) を、向き yaw でフィールドの target に合わせるときの機体の姿勢
@@ -49,3 +50,4 @@ namespace task_commander {
 	/// 平らな配列 [xmin, ymin, xmax, ymax, ...] を箱にする。長さが 4 の倍数でなければ std::invalid_argument
 	auto boxes_from_flat(const std::vector<double>& flat, const std::string& what) -> std::vector<Box>;
 } // namespace task_commander
+

@@ -20,6 +20,8 @@
 /// (~/state に出す)。リトライなどで実際と合わなくなったら ~/reset で忘れさせる。
 
 #include <atomic>
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -36,6 +38,7 @@
 
 #include <gripper/msg/gripper_state.hpp>
 #include <gripper/srv/set_lift_position.hpp>
+#include <gripper/action/move_lift.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <path_follower/action/follow_path.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -46,15 +49,21 @@
 
 #include "task_commander/action/run_task.hpp"
 #include "task_commander/geometry.hpp"
+#include "task_commander/pickup.hpp"
+#include "task_commander/pickup_execution.hpp"
 
 namespace {
 	using RunTask = task_commander::action::RunTask;
 	using GoalHandle = rclcpp_action::ServerGoalHandle<RunTask>;
 	using FollowPath = path_follower::action::FollowPath;
+	using MoveLift = gripper::action::MoveLift;
 	using task_commander::Box;
 	using task_commander::Field;
 	using task_commander::Pose2;
 	using namespace std::chrono_literals;
+	auto steady_seconds() -> double {
+		return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+	}
 
 	/// 作業の途中の失敗 (取り消しを含む)
 	using Status = std::expected<void, std::string>;
@@ -68,6 +77,12 @@ namespace {
 		rclcpp::Subscription<gripper::msg::GripperState>::SharedPtr state_sub{};
 		std::optional<gripper::msg::GripperState> state{};
 		bool holding{false};
+		bool holding_uncertain{false};
+		rclcpp_action::Client<MoveLift>::SharedPtr lift_action{};
+		std::array<double,3> pickup_heights{}; // pick, clear, carry, resolved from gripper.yaml
+		double pickup_tolerance{.005};
+		std::uint64_t state_sequence{};
+		double state_received_at{};
 	};
 
 	auto pose_from(const std::vector<double>& v, const char* name) -> Pose2 {
@@ -90,6 +105,7 @@ namespace {
 				throw std::invalid_argument("field.bounds and field.shelf must be [xmin, ymin, xmax, ymax]");
 			}
 			this->field_.bounds = Box{bounds[0], bounds[1], bounds[2], bounds[3]};
+			this->field_.tall_obstacles = shelf;
 			// 棚も壁と同じく避ける
 			walls.push_back(shelf.front());
 			this->walls_ = walls;
@@ -108,9 +124,37 @@ namespace {
 			this->blocks_y_ = this->declare_parameter<double>("field.notes_y");
 			this->block_size_ = this->declare_parameter<double>("field.note_size");
 			this->picked_.assign(this->blocks_x_.size(), false);
+			this->uncertain_blocks_.assign(this->blocks_x_.size(), false);
 			this->pick_yaw_ = this->declare_parameter<double>("pick.yaw");
 			this->pick_standoff_ = this->declare_parameter<double>("pick.standoff");
 			this->grip_time_ = this->declare_parameter<double>("pick.grip_time");
+			this->pickup_settings_.yaw = this->pick_yaw_;
+			this->pickup_settings_.standoff = this->pick_standoff_;
+			this->pickup_settings_.margin = this->min_clearance_;
+			this->pickup_settings_.yaw_offsets = this->declare_parameter<std::vector<double>>("pick.yaw_offsets");
+			this->pickup_settings_.yaw_resolution = this->declare_parameter<double>("pick.yaw_resolution");
+			this->pickup_settings_.transit_y = this->declare_parameter<double>("pick.transit_y");
+			this->pickup_settings_.wall_padding = this->declare_parameter<double>("pick.wall_padding");
+			this->pickup_settings_.bounds_padding = this->declare_parameter<double>("pick.bounds_padding");
+			this->pickup_alignment_tolerance_ = this->declare_parameter<double>("pick.alignment_tolerance");
+			this->pickup_require_feedback_ = this->declare_parameter<bool>("pick.require_feedback");
+			const auto polygon = [](const std::vector<double>& flat) {
+				if (flat.size() < 6 || flat.size() % 2) throw std::invalid_argument("pickup footprint needs x,y pairs");
+				task_commander::Polygon out;
+				for (std::size_t i=0;i<flat.size();i+=2) {
+					if (!std::isfinite(flat[i]) || !std::isfinite(flat[i+1])) throw std::invalid_argument("pickup footprint must be finite");
+					out.push_back({flat[i],flat[i+1]});
+				}
+				return out;
+			};
+			this->pickup_geometry_.raised = polygon(this->declare_parameter<std::vector<double>>("pick.raised_footprint"));
+			this->pickup_geometry_.lowered = polygon(this->declare_parameter<std::vector<double>>("pick.lowered_footprint"));
+			this->pickup_geometry_.contacts = task_commander::boxes_from_flat(this->declare_parameter<std::vector<double>>("pick.contact_regions"), "pick.contact_regions");
+			this->pickup_layout_ = {this->blocks_x_,this->blocks_y_,this->block_size_};
+			if (const auto valid=task_commander::validate_layout(this->pickup_layout_, {this->field_.bounds,this->walls_,this->field_.tall_obstacles}); !valid)
+				throw std::invalid_argument(valid.error());
+			if (!std::isfinite(this->grip_time_) || this->grip_time_<0 || !std::isfinite(this->pickup_alignment_tolerance_) || this->pickup_alignment_tolerance_<=0)
+				throw std::invalid_argument("invalid pickup grip time or alignment tolerance");
 
 			// 棚 (ビンゴ): 列の中心の x、自チーム側の面の y (棚の箱の ymax)、ブロックの中心を面からどれだけ奥に置くか
 			this->columns_x_ = this->declare_parameter<std::vector<double>>("field.shelf_columns_x");
@@ -133,10 +177,16 @@ namespace {
 				throw std::invalid_argument("lift.row_approach and lift.row_release need one index per shelf row");
 			}
 			this->lift_timeout_ = this->declare_parameter<double>("lift.timeout");
+			if (!std::isfinite(this->lift_timeout_) || this->lift_timeout_<=0) throw std::invalid_argument("lift.timeout must be finite and positive");
 
 			// 速さ: 寄るときと下がるとき (最後の一区間) は approach_speed
 			this->travel_speed_ = this->declare_parameter<double>("travel_speed");
 			this->approach_speed_ = this->declare_parameter<double>("approach_speed");
+			this->pickup_motion_timeout_ = this->declare_parameter<double>("pick.motion_timeout");
+			if (!std::isfinite(this->pickup_motion_timeout_) || this->pickup_motion_timeout_<=0
+			    || !std::isfinite(this->travel_speed_) || this->travel_speed_<0
+			    || !std::isfinite(this->approach_speed_) || this->approach_speed_<=0)
+				throw std::invalid_argument("invalid pickup timeout or travel/approach speed");
 			this->sweep_step_ = this->declare_parameter<double>("sweep_step");
 
 			// --- 把持機構 ---
@@ -146,11 +196,22 @@ namespace {
 				throw std::invalid_argument("grippers.offsets must be [x0, y0, x1, y1, ...] (two numbers per gripper)");
 			}
 			this->grippers_.resize(names.size());
+			const auto pickup_heights = this->declare_parameter<std::vector<double>>("pick.lift_heights");
+			const auto pickup_tolerances = this->declare_parameter<std::vector<double>>("pick.lift_tolerances");
+			if (names.empty() || pickup_heights.size()!=3*names.size() || pickup_tolerances.size()!=names.size() || this->pickup_geometry_.contacts.size()!=names.size())
+				throw std::invalid_argument("pickup heights/tolerances/contact regions must match grippers.names");
 			for (std::size_t i = 0; i < names.size(); ++i) {
 				auto& g = this->grippers_[i];
 				g.name = names[i];
 				g.offset_x = offsets[2 * i];
 				g.offset_y = offsets[2 * i + 1];
+				for (std::size_t j=0;j<3;++j) {
+					g.pickup_heights[j]=pickup_heights[3*i+j];
+					if (!std::isfinite(g.pickup_heights[j])) throw std::invalid_argument("pickup lift height must be finite");
+				}
+				g.pickup_tolerance=pickup_tolerances[i];
+				if (!std::isfinite(g.pickup_tolerance) || g.pickup_tolerance<=0) throw std::invalid_argument("invalid pickup lift tolerance");
+				g.lift_action = rclcpp_action::create_client<MoveLift>(this,"/"+g.name+"/move_lift",this->group_);
 				g.lift = this->create_client<gripper::srv::SetLiftPosition>("/" + g.name + "/set_lift_position", rclcpp::ServicesQoS{}, this->group_);
 				g.suction = this->create_client<std_srvs::srv::SetBool>("/" + g.name + "/set_suction", rclcpp::ServicesQoS{}, this->group_);
 				rclcpp::SubscriptionOptions options{};
@@ -160,6 +221,8 @@ namespace {
 					[this, i](const gripper::msg::GripperState& m) {
 						const std::scoped_lock lock{this->mutex_};
 						this->grippers_[i].state = m;
+						++this->grippers_[i].state_sequence;
+						this->grippers_[i].state_received_at = steady_seconds();
 					},
 					options
 				);
@@ -180,6 +243,9 @@ namespace {
 						std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z)),
 					};
 					this->odom_stamp_ = this->now();
+					this->odom_received_at_ = steady_seconds();
+					this->odom_source_stamp_ = rclcpp::Time(m.header.stamp).nanoseconds();
+					this->odom_in_field_ = m.header.frame_id == "field";
 				},
 				options
 			);
@@ -188,7 +254,8 @@ namespace {
 			this->reset_srv_ = this->create_service<std_srvs::srv::Trigger>(
 				"~/reset",
 				[this](const std::shared_ptr<std_srvs::srv::Trigger::Request>, std::shared_ptr<std_srvs::srv::Trigger::Response> res) {
-					if (this->busy_) {
+					bool idle = false;
+					if (!this->busy_.compare_exchange_strong(idle,true)) {
 						res->success = false;
 						res->message = "a task is running";
 						return;
@@ -196,12 +263,16 @@ namespace {
 					{
 						const std::scoped_lock lock{this->mutex_};
 						std::ranges::fill(this->picked_, false);
+						std::ranges::fill(this->uncertain_blocks_, false);
+						this->motion_stop_unconfirmed_=false;
 						std::ranges::fill(this->filled_, false);
 						for (auto& g : this->grippers_) {
 							g.holding = false;
+							g.holding_uncertain = false;
 						}
 					}
 					this->publish_state();
+					this->busy_ = false;
 					res->success = true;
 					res->message = "forgot picked blocks, held blocks and placed cells";
 				},
@@ -224,7 +295,10 @@ namespace {
 	private:
 		// ---------------------------------------------------------------- 受け付け
 
-		auto check_goal(const RunTask::Goal& goal) const -> std::optional<std::string> {
+		auto check_goal(const RunTask::Goal& goal) -> std::optional<std::string> {
+			const std::scoped_lock lock{this->mutex_};
+			if (this->motion_stop_unconfirmed_) return "motion stop is unconfirmed; inspect and reconcile with ~/reset";
+			for (const auto& g:this->grippers_) if(g.holding_uncertain) return "a load is uncertain; inspect and reconcile with ~/reset";
 			const auto gripper_ok = goal.gripper >= 0 && goal.gripper < std::ssize(this->grippers_);
 			switch (goal.type) {
 			case RunTask::Goal::PICK:
@@ -342,6 +416,130 @@ namespace {
 			return this->odom_;
 		}
 
+		auto pickup_odom() -> std::optional<Pose2> {
+			const std::scoped_lock lock{this->mutex_};
+			const auto source_age = this->now().nanoseconds()-this->odom_source_stamp_;
+			if (!this->odom_ || !this->odom_in_field_ || source_age<0 || source_age>500000000
+			    || steady_seconds()-this->odom_received_at_>.5) return std::nullopt;
+			return this->odom_;
+		}
+
+		auto pickup_request(const int gripper,const int block,const Pose2& start) -> task_commander::PickupRequest {
+			const std::scoped_lock lock{this->mutex_};
+			const auto& g=this->grippers_[static_cast<std::size_t>(gripper)];
+			task_commander::PickupRequest request{start,static_cast<std::size_t>(block),static_cast<std::size_t>(gripper),{g.offset_x,g.offset_y},this->picked_,{}};
+			for (std::size_t i=0;i<this->picked_.size();++i) request.removed.push_back(this->picked_[i]&&!this->uncertain_blocks_[i]);
+			return request;
+		}
+
+		// PICK uses the cancellable height action. Index service moves cannot be
+		// cancelled; their heights are resolved from the same gripper YAML at launch.
+		auto set_pickup_lift(const int gripper,const std::size_t slot) -> Status {
+			auto& g=this->grippers_[static_cast<std::size_t>(gripper)];
+			auto client=g.lift_action;
+			if (!client->wait_for_action_server(1s)) return std::unexpected{g.name+": move_lift is unavailable"};
+			if (this->canceled()) return std::unexpected{"canceled before lift request"};
+			std::uint64_t before;
+			{ const std::scoped_lock lock{this->mutex_}; before=g.state_sequence; }
+			const auto issued=this->now().nanoseconds();
+			MoveLift::Goal goal{};goal.height=g.pickup_heights.at(slot);
+			auto abandoned=std::make_shared<std::atomic<bool>>(false);
+			rclcpp_action::Client<MoveLift>::SendGoalOptions options;
+			options.goal_response_callback=[client,abandoned](const rclcpp_action::ClientGoalHandle<MoveLift>::SharedPtr& h) {
+				if (h&&abandoned->load()) client->async_cancel_goal(h);
+			};
+			auto future=client->async_send_goal(goal,options);
+			if (auto s=this->wait([&]{return future.wait_for(0s)==std::future_status::ready;},2.,"sending lift goal"); !s) {
+				abandoned->store(true);
+				this->motion_stop_unconfirmed_=true;
+				if (future.wait_for(0s)==std::future_status::ready) { if(auto h=future.get()) client->async_cancel_goal(h); }
+				return s;
+			}
+			const auto handle=future.get();
+			if (!handle) return std::unexpected{g.name+": lift goal rejected"};
+			auto result=client->async_get_result(handle);
+			const auto deadline=std::chrono::steady_clock::now()+std::chrono::duration<double>(this->lift_timeout_);
+			while (result.wait_for(20ms)!=std::future_status::ready) {
+				if (this->canceled() || !rclcpp::ok() || std::chrono::steady_clock::now()>=deadline) {
+					client->async_cancel_goal(handle);
+					// Wait briefly for the gripper's stop_move acknowledgement, without
+					// ignoring it merely because the parent action is already cancelling.
+					if (result.wait_for(2s)!=std::future_status::ready)
+						{ this->motion_stop_unconfirmed_=true; return std::unexpected{g.name+": lift cancel unconfirmed; inspect mechanism"}; }
+					return std::unexpected{g.name+": lift canceled or timed out"};
+				}
+			}
+			const auto wrapped=result.get();
+			if (wrapped.code!=rclcpp_action::ResultCode::SUCCEEDED || !wrapped.result || !wrapped.result->reached
+			    || !std::isfinite(wrapped.result->height) || std::abs(wrapped.result->height-goal.height)>g.pickup_tolerance)
+				return std::unexpected{g.name+": "+(wrapped.result?wrapped.result->message:"no lift result")};
+			return this->wait([&] {
+				const std::scoped_lock lock{this->mutex_};
+				if (!g.state) return false;
+				const auto stamp=rclcpp::Time(g.state->header.stamp).nanoseconds();
+				const task_commander::LiftObservation observation{g.state_sequence,stamp,g.state_received_at,g.state->lift_height,
+				    g.state->lift_arrived,g.state->lift_moving,g.state->lift_feedback};
+				return stamp<=this->now().nanoseconds()&&task_commander::pickup_lift_confirmed(observation,before,issued,
+				    goal.height,steady_seconds(),this->pickup_require_feedback_,g.pickup_tolerance);
+			},1.,g.name+": waiting for fresh lift arrival feedback");
+		}
+
+		auto move_pickup(const std::vector<Pose2>& poses,const int gripper,const int block,const bool lowered,const bool captured,const double speed) -> Status {
+			if(auto ready=this->pickup_lifts_ready(gripper,lowered);!ready)return ready;
+			const auto here=this->pickup_odom();
+			if (!here) return std::unexpected{"no fresh field-frame odometry for pickup"};
+			std::vector<Pose2> sweep{*here};
+			for (const auto& p:poses) {
+				if (std::hypot(p.x-sweep.back().x,p.y-sweep.back().y)<=1e-6) {
+					if (std::abs(std::remainder(p.yaw-sweep.back().yaw,2*std::numbers::pi))>1e-6)
+						return std::unexpected{"pickup path would require an unsupported in-place turn"};
+				} else sweep.push_back(p);
+			}
+			const auto request=this->pickup_request(gripper,block,*here);
+			const auto gap=task_commander::pickup_stage_clearance(this->pickup_layout_,{this->field_.bounds,this->walls_,this->field_.tall_obstacles},
+			    this->pickup_geometry_,this->pickup_settings_,request,sweep,lowered,captured);
+			if (gap<this->min_clearance_) return std::unexpected{std::format("pickup stage clearance {:.3f} m below {:.3f} m",gap,this->min_clearance_)};
+			if (sweep.size()==1) return {};
+			FollowPath::Goal goal{};goal.max_speed=speed;
+			for (std::size_t i=1;i<sweep.size();++i) { goal.x.push_back(sweep[i].x);goal.y.push_back(sweep[i].y);goal.yaw.push_back(sweep[i].yaw); }
+			return this->follow(goal,"pickup movement",this->pickup_motion_timeout_,[this,gripper,lowered]()->Status {
+				if(!this->pickup_odom())return std::unexpected{"pickup odometry became stale"};
+				return this->pickup_lifts_ready(gripper,lowered);
+			});
+		}
+
+		auto pickup_lifts_ready(const int selected,const bool lowered) -> Status {
+			const std::scoped_lock lock{this->mutex_};
+			for(std::size_t i=0;i<this->grippers_.size();++i) {
+				const auto& g=this->grippers_[i];
+				const auto slot=(static_cast<int>(i)==selected&&lowered)?1:2;
+				if(!g.state)return std::unexpected{g.name+": no pickup lift state"};
+				const auto stamp=rclcpp::Time(g.state->header.stamp).nanoseconds();
+				const auto age=this->now().nanoseconds()-stamp;
+				const task_commander::LiftObservation o{g.state_sequence,stamp,g.state_received_at,g.state->lift_height,
+				    g.state->lift_arrived,g.state->lift_moving,g.state->lift_feedback};
+				if(age<0||age>500000000||!task_commander::pickup_lift_confirmed(o,0,0,g.pickup_heights[slot],
+				    steady_seconds(),this->pickup_require_feedback_,g.pickup_tolerance))
+					return std::unexpected{g.name+": pickup lift left its confirmed height or feedback became stale"};
+			}
+			return {};
+		}
+
+		auto check_pickup_lowering(const int gripper,const int block,const bool align) -> Status {
+			const auto pose=this->pickup_odom();
+			if (!pose) return std::unexpected{"no fresh field pose before lowering"};
+			const auto request=this->pickup_request(gripper,block,*pose);
+			const double gap=task_commander::pickup_stage_clearance(this->pickup_layout_,{this->field_.bounds,this->walls_,this->field_.tall_obstacles},
+			    this->pickup_geometry_,this->pickup_settings_,request,{*pose},true,false);
+			if (gap<this->min_clearance_) return std::unexpected{"actual pose is unsafe for lowering"};
+			if (align) {
+				const auto tool=task_commander::offset_pose(*pose,request.tool[0],request.tool[1]);
+				if (std::hypot(tool.x-this->blocks_x_[static_cast<std::size_t>(block)],tool.y-this->blocks_y_)>this->pickup_alignment_tolerance_)
+					return std::unexpected{"suction centre is not aligned with box; not lowering"};
+			}
+			return {};
+		}
+
 		// ---------------------------------------------------------------- 昇降と吸引
 
 		/// gripper の昇降を lift.positions の index 番目へ。wait_arrival なら着くまで待つ
@@ -391,30 +589,45 @@ namespace {
 			const std::scoped_lock lock{this->mutex_};
 			const double h = 0.5 * this->block_size_;
 			for (std::size_t i = 0; i < this->blocks_x_.size(); ++i) {
-				if (!this->picked_[i]) {
+				if (!this->picked_[i] || this->uncertain_blocks_[i]) {
 					field.obstacles.push_back(Box{this->blocks_x_[i] - h, this->blocks_y_ - h, this->blocks_x_[i] + h, this->blocks_y_ + h});
 				}
 			}
 			return field;
 		}
 
-		auto follow(const FollowPath::Goal& goal, const std::string& what) -> Status {
+		auto follow(const FollowPath::Goal& goal, const std::string& what, const double timeout=0.,const std::function<Status()>& guard={}) -> Status {
 			if (!this->follow_client_->wait_for_action_server(1s)) return std::unexpected{"path_follower's follow action is not available"};
-			auto goal_future = this->follow_client_->async_send_goal(goal);
+			auto abandoned=std::make_shared<std::atomic<bool>>(false);
+			rclcpp_action::Client<FollowPath>::SendGoalOptions options;
+			options.goal_response_callback=[client=this->follow_client_,abandoned](const rclcpp_action::ClientGoalHandle<FollowPath>::SharedPtr& handle) {
+				if(handle&&abandoned->load())client->async_cancel_goal(handle);
+			};
+			auto goal_future = this->follow_client_->async_send_goal(goal,options);
 			if (const auto s = this->wait([&] { return goal_future.wait_for(0s) == std::future_status::ready; }, 2.0, "sending " + what); !s) {
+				abandoned->store(true);
+				if(timeout>0)this->motion_stop_unconfirmed_=true;
+				if(goal_future.wait_for(0s)==std::future_status::ready) { if(auto h=goal_future.get())this->follow_client_->async_cancel_goal(h); }
 				return s;
 			}
 			const auto goal_handle = goal_future.get();
 			if (!goal_handle) return std::unexpected{"path_follower rejected " + what};
 			auto result_future = this->follow_client_->async_get_result(goal_handle);
+			const auto deadline=std::chrono::steady_clock::now()+std::chrono::duration<double>(timeout>0?timeout:1e9);
 			while (result_future.wait_for(20ms) != std::future_status::ready) {
-				if (this->canceled() || !rclcpp::ok()) {
+				if(guard)if(auto status=guard();!status) {
 					this->follow_client_->async_cancel_goal(goal_handle);
+					if(result_future.wait_for(2s)!=std::future_status::ready)this->motion_stop_unconfirmed_=true;
+					return status;
+				}
+				if (this->canceled() || !rclcpp::ok() || std::chrono::steady_clock::now()>deadline) {
+					this->follow_client_->async_cancel_goal(goal_handle);
+					if(timeout>0 && result_future.wait_for(2s)!=std::future_status::ready) this->motion_stop_unconfirmed_=true;
 					return std::unexpected{"canceled while " + what};
 				}
 			}
 			const auto wrapped = result_future.get();
-			if (wrapped.code != rclcpp_action::ResultCode::SUCCEEDED || !wrapped.result->success) {
+			if (wrapped.code != rclcpp_action::ResultCode::SUCCEEDED || !wrapped.result || !wrapped.result->success) {
 				return std::unexpected{what + ": " + (wrapped.result ? wrapped.result->message : std::string{"no result"})};
 			}
 			return {};
@@ -471,38 +684,66 @@ namespace {
 		}
 
 		auto pick(const int gripper, const int block) -> Status {
-			auto& g = this->grippers_[static_cast<std::size_t>(gripper)];
+			auto& g=this->grippers_[static_cast<std::size_t>(gripper)];
 			{
 				const std::scoped_lock lock{this->mutex_};
-				if (g.holding) return std::unexpected{g.name + " is already holding a block"};
-				if (this->picked_[static_cast<std::size_t>(block)]) return std::unexpected{std::format("block {} was already picked (call ~/reset if it is back)", block)};
+				if(g.holding || g.holding_uncertain)return std::unexpected{g.name+" is holding or uncertain; reconcile and reset first"};
+				if(this->picked_[static_cast<std::size_t>(block)])return std::unexpected{"box is held or uncertain; reconcile and reset first"};
 			}
-			const auto target = task_commander::pose_for_tool(this->blocks_x_[static_cast<std::size_t>(block)], this->blocks_y_, this->pick_yaw_, g.offset_x, g.offset_y);
-			// 手前 = 道具の向き (機体から見た把持機構の向き) の逆へ standoff
-			const double reach = std::hypot(g.offset_x, g.offset_y);
-			const auto standoff = task_commander::offset_pose(target, -this->pick_standoff_ * g.offset_x / reach, -this->pick_standoff_ * g.offset_y / reach);
-
-			this->step(std::format("{}: lift to clear, other lifts to carry", g.name));
-			for (std::size_t i = 0; i < this->grippers_.size(); ++i) {
-				const int index = static_cast<int>(i) == gripper ? this->lift_clear_ : this->lift_carry_;
-				if (const auto s = this->set_lift(static_cast<int>(i), index); !s) return s;
-			}
-			this->step(std::format("moving {} over block {}", g.name, block));
-			if (const auto s = this->move({standoff, target}, std::format("moving {} over block {}", g.name, block), this->approach_speed_); !s) return s;
-			this->step(std::format("{}: down, suction on", g.name));
-			if (const auto s = this->set_lift(gripper, this->lift_pick_); !s) return s;
-			if (const auto s = this->set_suction(gripper, true); !s) return s;
-			if (const auto s = this->sleep(this->grip_time_, "gripping"); !s) return s;
-			{
-				const std::scoped_lock lock{this->mutex_};
-				g.holding = true;
-				this->picked_[static_cast<std::size_t>(block)] = true;
-			}
-			this->publish_state();
-			this->step(std::format("{}: up to carry", g.name));
-			if (const auto s = this->set_lift(gripper, this->lift_carry_); !s) return s;
-			this->step("backing off");
-			return this->move({standoff}, "backing off from the notes", this->approach_speed_);
+			const auto here=this->pickup_odom();
+			if(!here)return std::unexpected{"no fresh field-frame pose for pickup"};
+			const auto plan=task_commander::plan_pickup(this->pickup_layout_,{this->field_.bounds,this->walls_,this->field_.tall_obstacles},
+			    this->pickup_geometry_,this->pickup_settings_,this->pickup_request(gripper,block,*here));
+			if(!plan)return std::unexpected{plan.error()};
+			this->step(std::format("{}: pickup plan clearance {:.3f} m",g.name,plan->clearance));
+			const auto result=task_commander::run_pickup([&](task_commander::PickupStage stage)->Status {
+				using Stage=task_commander::PickupStage;
+				switch(stage) {
+				case Stage::RaiseAll:
+					this->step("all lifts to carry before travel");
+					for(std::size_t i=0;i<this->grippers_.size();++i)if(auto status=this->set_pickup_lift(static_cast<int>(i),2);!status)return status;
+					return {};
+				case Stage::Transit:
+					this->step("pickup: raised transit to standoff");
+					return this->move_pickup(plan->transit,gripper,block,false,false,this->travel_speed_);
+				case Stage::Clear:
+					this->step("pickup: selected lift to clear");
+					if(auto status=this->check_pickup_lowering(gripper,block,false);!status)return status;
+					return this->set_pickup_lift(gripper,1);
+				case Stage::Approach:
+					this->step("pickup: lowered final approach");
+					return this->move_pickup(plan->approach,gripper,block,true,false,this->approach_speed_);
+				case Stage::Lower:
+					this->step("pickup: align suction centre, lower to pick");
+					if(auto status=this->check_pickup_lowering(gripper,block,true);!status)return status;
+					return this->set_pickup_lift(gripper,0);
+				case Stage::Suction:
+					this->step("pickup: suction requested; load uncertain until raised");
+					return this->set_suction(gripper,true);
+				case Stage::GripWait:return this->sleep(this->grip_time_,"gripping");
+				case Stage::Carry:
+					this->step("pickup: raise and confirm fresh carry feedback");
+					return this->set_pickup_lift(gripper,2);
+				case Stage::Retreat:
+					this->step("pickup: raised retreat");
+					return this->move_pickup(plan->retreat,gripper,block,false,true,this->approach_speed_);
+				}
+				return std::unexpected{"invalid pickup stage"};
+			},[&](task_commander::PickupLoad load) {
+				{
+					const std::scoped_lock lock{this->mutex_};
+					g.holding=true;
+					g.holding_uncertain=load==task_commander::PickupLoad::Uncertain;
+					this->picked_[static_cast<std::size_t>(block)]=true;
+					this->uncertain_blocks_[static_cast<std::size_t>(block)]=g.holding_uncertain;
+				}
+				this->publish_state();
+			},[&]()->Status {
+				if(this->canceled()||!rclcpp::ok())return std::unexpected{"pickup canceled"};
+				return {};
+			});
+			if(!result&&g.holding_uncertain)return std::unexpected{result.error()+"; load uncertain: inspect box/gripper and reconcile with ~/reset"};
+			return result;
 		}
 
 		auto place(const int gripper, const int column, const int row) -> Status {
@@ -511,6 +752,7 @@ namespace {
 			{
 				const std::scoped_lock lock{this->mutex_};
 				if (!g.holding) return std::unexpected{g.name + " is not holding a block"};
+				if (g.holding_uncertain) return std::unexpected{g.name + " load is uncertain; reconcile and reset before PLACE"};
 				if (this->filled_[cell]) return std::unexpected{std::format("cell (column {}, row {}) already has our block", column, row)};
 				if (row > 0 && !this->filled_[cell - 1]) {
 					// 2 段目より上は、同じ列の下の段にノーツがあるときだけ (相手のノーツでもよいので、ここでは止めない)
@@ -564,6 +806,8 @@ namespace {
 						if (this->filled_[c * static_cast<std::size_t>(this->rows_) + static_cast<std::size_t>(r)]) text += std::format(" ({}, {})", c, r);
 					}
 				}
+				text += "\nuncertain grippers:";
+				for (const auto& g:this->grippers_) if(g.holding_uncertain) text += " "+g.name;
 			}
 			std_msgs::msg::String m{};
 			m.data = text;
@@ -610,9 +854,20 @@ namespace {
 
 		// 覚えていること (mutex_)
 		std::vector<bool> picked_{};
+		std::vector<bool> uncertain_blocks_{};
+		task_commander::PickupLayout pickup_layout_{};
+		task_commander::PickupGeometry pickup_geometry_{};
+		task_commander::PickupSettings pickup_settings_{};
+		bool pickup_require_feedback_{true};
+		std::atomic<bool> motion_stop_unconfirmed_{false};
+		double pickup_motion_timeout_{30.};
+		double pickup_alignment_tolerance_{.03};
 		std::vector<bool> filled_{};
 		std::optional<Pose2> odom_{};
 		rclcpp::Time odom_stamp_{};
+		double odom_received_at_{};
+		std::int64_t odom_source_stamp_{};
+		bool odom_in_field_{};
 
 		rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_{};
 		rclcpp_action::Client<FollowPath>::SharedPtr follow_client_{};

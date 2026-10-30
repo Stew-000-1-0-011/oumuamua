@@ -26,6 +26,8 @@ oumuamua_sim の robot_sim を立てる。robot_sim は /cmd_vel で動き、/sc
 """
 
 import tempfile
+from pathlib import Path
+import runpy
 
 import yaml
 from launch import LaunchDescription, Substitution
@@ -75,6 +77,24 @@ class NodeParams(Substitution):
                 values[key] = yaml.safe_load(text)
         with tempfile.NamedTemporaryFile('w', prefix=f'{self.node_name}_', suffix='.yaml', delete=False) as f:
             yaml.safe_dump({self.node_name: {'ros__parameters': values}}, f)
+            return f.name
+
+
+class PickupParams(Substitution):
+    """Read the same footprint/lift files used by the robot, then override by node name."""
+    def perform(self, context):
+        def path(value):
+            return perform_substitutions(context, normalize_to_list_of_substitutions(value))
+        helper = runpy.run_path(str(Path(__file__).with_name('pickup_parameters.py')))
+        values = helper['pickup_parameters'](
+            path(config('oumuamua_bringup', 'task_commander.yaml')),
+            path(LaunchConfiguration('gripper_params')),
+            path(config('oumuamua_bringup', 'footprints/raised.yaml')),
+            path(config('oumuamua_bringup', 'footprints/lowered.yaml')),
+            require_feedback=path(LaunchConfiguration('sim')) != 'true',
+        )
+        with tempfile.NamedTemporaryFile('w', prefix='pickup_', suffix='.yaml', delete=False) as f:
+            yaml.safe_dump({'task_commander': {'ros__parameters': values}}, f)
             return f.name
 
 
@@ -316,6 +336,7 @@ def generate_launch_description():
         parameters=[
             config('oumuamua_bringup', 'field.yaml'),
             config('oumuamua_bringup', 'task_commander.yaml'),
+            PickupParams(),
             NodeParams('task_commander', {
                 'odom_topic': PythonExpression(
                     ["'/state_estimator/odom' if '", estimator, "' == 'true' else '/tracker_node/odom'"]),

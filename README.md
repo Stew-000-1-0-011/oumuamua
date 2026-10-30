@@ -32,6 +32,9 @@ ROS 2 Lyrical Luth (Ubuntu 26.04) ワークスペース。外部ドライバな�
   吸引は `/suction<i>/target_current` -> mini_shirasu_node (`suction<i>`、電流制御) -> mini-shirasu。詳しくは `src/gripper/README.md`
 - harite は `/harite/target_velocity` (ロータ角速度 [rad/s]) を受け、`/robomas_frame` (速度モード)・`/robomas_target3` -> robomas_bridge -> ロボマス ID 3 を動かす。吸引・位置制御は持たない。詳しくは [src/harite/README.md](src/harite/README.md)
 - task_commander が `~/run` (アクション) で作業を受け、path_follower の `~/follow` と gripper<i> を順に動かす。詳しくは `src/task_commander/README.md`
+- 箱の回収は `config/field.yaml` の `field.notes_x` に5個の初期中心x [m] を指定する。配列順が箱番号0〜4。
+  共通のy・一辺長は `field.notes_y` / `field.note_size`。回収は実形状で接近/退避を検査する。
+  設定・回収順の例・失敗時の復旧は [task_commanderの回収設定](src/task_commander/README.md#5箱の回収設定) を参照。
 - 車輪の実測: mini_shirasu_node の `~/joint_state` -> chassis_node が機体速度にして `~/body_velocity`
   -> state_estimator の `~/body_velocity` (車輪オドメトリ)
 
@@ -54,6 +57,12 @@ ros2 service call /path_follower/stop std_srvs/srv/Trigger                   # �
 経路は `src/oumuamua_bringup/config/paths/` にある。スラロームの往復 (`slalom_forward.csv`, `slalom_backward.csv`) は
 `slalom.route.yaml` から作り、task_commander が使う。`start_to_shelf.route.yaml` が定義で、そこから
 行き (`start_to_shelf.csv`) と帰り (`shelf_to_start.csv`。同じ経路を逆にたどる) を作ってある。定義を変えたら両方作り直す:
+
+スラロームは添付CADの上下形状を `config/footprints/{raised,lowered}.yaml` に保存し、原座標を
+`(x_base,y_base)=(-y_attachment,x_attachment)` で変換して検証する。往復とも全昇降がcarryに到達してから通過し、
+入口・出口では下形状も40 mm以上の余裕を確認する。本文の壁厚38 mmに合わせて検証上だけ壁を拡大する。
+再生成コマンドは `config/paths/slalom.route.yaml` 冒頭、図と検証結果は `docs/superpowers/artifacts/` を参照。
+上形状を使う前提として、持ち上げた機構・保持ノーツの下面が90 mmの壁より高いことを実機で確認する。
 
 ```bash
 cd src/oumuamua_bringup/config/paths

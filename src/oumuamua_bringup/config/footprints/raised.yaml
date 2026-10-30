@@ -1,0 +1,6 @@
+# Raised-box variant: drivetrain + LiDAR + LiDAR brackets only. Units m.
+# Same omni-triangle centroid and axes as the full footprint.
+# STEP origin offset (mm): X=-5.222008403, Z=-159.119585320.
+# ROS x=(STEP X-(-5.222008403))/1000; y=-(STEP Z-(-159.119585320))/1000.
+# Geometric allowance only; no driving safety distance added.
+footprint: "[[-0.225497, -0.083424], [-0.18238, -0.158219], [-0.18177, -0.158891], [-0.180924, -0.159256], [0.190964, -0.159295], [0.191999, -0.159028], [0.192737, -0.158359], [0.235743, -0.083881], [0.23602, -0.083018], [0.235938, -0.082179], [0.050397, 0.239299], [0.050397, 0.331055], [-0.039953, 0.331055], [-0.039953, 0.239299], [-0.225299, -0.081729], [-0.225566, -0.082512]]"

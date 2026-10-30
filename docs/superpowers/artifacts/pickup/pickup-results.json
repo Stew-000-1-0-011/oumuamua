@@ -1,0 +1,212 @@
+[
+  {
+    "scenario": 0,
+    "box": 0,
+    "gripper": 0,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 0,
+    "box": 0,
+    "gripper": 1,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 0,
+    "box": 1,
+    "gripper": 0,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 0,
+    "box": 1,
+    "gripper": 1,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 0,
+    "box": 2,
+    "gripper": 0,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 0,
+    "box": 2,
+    "gripper": 1,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 0,
+    "box": 3,
+    "gripper": 0,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 0,
+    "box": 3,
+    "gripper": 1,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 0,
+    "box": 4,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0369977882293
+  },
+  {
+    "scenario": 0,
+    "box": 4,
+    "gripper": 1,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 1,
+    "box": 0,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0200102229194
+  },
+  {
+    "scenario": 1,
+    "box": 0,
+    "gripper": 1,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 1,
+    "box": 1,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0583535841105
+  },
+  {
+    "scenario": 1,
+    "box": 1,
+    "gripper": 1,
+    "valid": true,
+    "clearance": 0.0465756627689
+  },
+  {
+    "scenario": 1,
+    "box": 2,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0279962424351
+  },
+  {
+    "scenario": 1,
+    "box": 2,
+    "gripper": 1,
+    "valid": true,
+    "clearance": 0.10812331378
+  },
+  {
+    "scenario": 1,
+    "box": 3,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0976793166136
+  },
+  {
+    "scenario": 1,
+    "box": 3,
+    "gripper": 1,
+    "valid": true,
+    "clearance": 0.10812331378
+  },
+  {
+    "scenario": 1,
+    "box": 4,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0976793166136
+  },
+  {
+    "scenario": 1,
+    "box": 4,
+    "gripper": 1,
+    "valid": true,
+    "clearance": 0.0545746666921
+  },
+  {
+    "scenario": 2,
+    "box": 0,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0200102229194
+  },
+  {
+    "scenario": 2,
+    "box": 0,
+    "gripper": 1,
+    "valid": false,
+    "clearance": 0.0
+  },
+  {
+    "scenario": 2,
+    "box": 1,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0583535841105
+  },
+  {
+    "scenario": 2,
+    "box": 1,
+    "gripper": 1,
+    "valid": true,
+    "clearance": 0.0381233137799
+  },
+  {
+    "scenario": 2,
+    "box": 2,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0369882895221
+  },
+  {
+    "scenario": 2,
+    "box": 2,
+    "gripper": 1,
+    "valid": true,
+    "clearance": 0.0381233137799
+  },
+  {
+    "scenario": 2,
+    "box": 3,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0369882895221
+  },
+  {
+    "scenario": 2,
+    "box": 3,
+    "gripper": 1,
+    "valid": true,
+    "clearance": 0.0381233137799
+  },
+  {
+    "scenario": 2,
+    "box": 4,
+    "gripper": 0,
+    "valid": true,
+    "clearance": 0.0369977882293
+  },
+  {
+    "scenario": 2,
+    "box": 4,
+    "gripper": 1,
+    "valid": false,
+    "clearance": 0.0
+  }
+]
