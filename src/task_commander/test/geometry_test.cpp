@@ -32,19 +32,43 @@ namespace {
 		check(near(q.x, 1.0, 1e-12) && near(q.y, 0.0, 1e-12), "offset_pose is the inverse");
 	}
 
+	/// 一辺 2 * half の正方形の外形 (中心が機体の中心)
+	auto square(const double half) -> Footprint { return {{-half, -half}, {half, -half}, {half, half}, {-half, half}}; }
+
 	void test_clearance() {
 		const Field field{.bounds = {-1.0, -1.0, 1.0, 1.0}, .obstacles = {{0.5, -0.1, 0.6, 0.1}}};
-		check(near(clearance(field, 0.0, 0.0, 0.3), 0.2, 1e-12), "distance to an obstacle minus the radius");
-		check(near(clearance(field, 0.0, 0.8, 0.1), 0.1, 1e-12), "distance to the bounds");
-		check(clearance(field, 0.55, 0.0, 0.1) < 0.0, "overlapping is negative");
-		// 角: (0.6, 0.1) から (0.9, 0.5) は 0.5
-		check(near(clearance(field, 0.9, 0.5, 0.0), 0.1, 1e-12), "bounds win when closer");
+		check(near(clearance(field, {0.0, 0.0, 0.0}, square(0.3)), 0.2, 1e-9), "distance from the outline to an obstacle");
+		check(near(clearance(field, {0.0, 0.8, 0.0}, square(0.1)), 0.1, 1e-9), "distance to the bounds");
+		check(clearance(field, {0.55, 0.0, 0.0}, square(0.1)) < 0.0, "overlapping is negative");
+		// 箱が外形の中にすっぽり入っていても重なりとみなす (外形の辺の点は箱に触れない)
+		check(clearance(field, {0.55, 0.0, 0.0}, square(0.3)) < 0.0, "an obstacle inside the outline is overlapping");
+		// 外形は向きで回る: 細長い外形 (前に 0.4 m) は、+x を向くと箱に届き、+y を向くと届かない
+		const Footprint stick{{-0.05, -0.05}, {0.4, -0.05}, {0.4, 0.05}, {-0.05, 0.05}};
+		check(near(clearance(field, {0.0, 0.0, 0.0}, stick), 0.1, 1e-9), "the outline follows the heading (+x)");
+		check(clearance(field, {0.0, 0.0, std::numbers::pi / 2}, stick) > 0.3, "the outline follows the heading (+y)");
 	}
 
 	void test_sweep() {
 		const Field field{.bounds = {-1.0, -1.0, 1.0, 1.0}, .obstacles = {{-0.05, -0.05, 0.05, 0.05}}};
-		const auto c = sweep_clearance(field, {{-0.5, 0.3, 0.0}, {0.5, 0.3, 0.0}}, 0.2, 0.01);
-		check(near(c.clearance, 0.05, 1e-9) && std::abs(c.x) <= 0.05 + 1e-9, "the narrowest point of a straight move");
+		const auto c = sweep_clearance(field, {{-0.5, 0.3, 0.0}, {0.5, 0.3, 0.0}}, square(0.1), 0.01);
+		check(near(c.clearance, 0.15, 1e-9) && std::abs(c.x) <= 0.15 + 1e-9, "the narrowest point of a straight move");
+		// その場で回る: 前に 0.4 m の外形が -y から +y へ (左回りに) 回ると、途中で +x の箱に当たる
+		const Field side{.bounds = {-1.0, -1.0, 1.0, 1.0}, .obstacles = {{0.3, -0.05, 0.35, 0.05}}};
+		const Footprint stick{{-0.05, -0.02}, {0.4, -0.02}, {0.4, 0.02}, {-0.05, 0.02}};
+		const auto turn = sweep_clearance(side, {{0.0, 0.0, -std::numbers::pi / 2}, {0.0, 0.0, std::numbers::pi / 2 - 0.01}}, stick, 0.01);
+		check(turn.clearance < 0.0 && std::abs(turn.yaw) < 0.1, "turning in place sweeps the outline");
+	}
+
+	void test_footprint_from_flat() {
+		const auto f = footprint_from_flat({0, 1, 2, 3, 4, 5}, "test");
+		check(f.size() == 3 && f[2].x == 4 && f[2].y == 5, "flat lists become points");
+		bool threw = false;
+		try {
+			footprint_from_flat({0, 1, 2, 3}, "test");
+		} catch (const std::invalid_argument&) {
+			threw = true;
+		}
+		check(threw, "fewer than 3 points is an error");
 	}
 
 	void test_boxes_from_flat() {
@@ -64,6 +88,7 @@ auto main() -> int {
 	test_pose_for_tool();
 	test_clearance();
 	test_sweep();
+	test_footprint_from_flat();
 	test_boxes_from_flat();
 	if (failures == 0) {
 		std::printf("all passed\n");
