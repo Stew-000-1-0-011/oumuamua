@@ -37,6 +37,8 @@ ament_export_dependencies(rosidl_default_runtime)
 # --- 姿勢と間隔の計算 (ROS非依存) ---
 add_library(task_commander_geometry STATIC
 	src/geometry.cpp
+	src/pickup.cpp
+	src/pickup_execution.cpp
 )
 target_include_directories(task_commander_geometry
 	PUBLIC
@@ -67,6 +69,30 @@ install(TARGETS task_commander_node
 )
 
 if(BUILD_TESTING)
+	find_package(Python3 REQUIRED COMPONENTS Interpreter)
+	add_executable(pickup_probe test/pickup_probe.cpp)
+	target_link_libraries(pickup_probe PRIVATE task_commander_geometry)
+	ament_add_test(pickup_geometry_fixture
+		COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/pickup_preview.py"
+			"$<TARGET_FILE:pickup_probe>" "${CMAKE_CURRENT_BINARY_DIR}/pickup-fixture"
+		TIMEOUT 90
+		GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+	)
+	ament_add_test(pickup_ros
+		COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/pickup_ros_test.py"
+			"$<TARGET_FILE:task_commander_node>"
+			"${CMAKE_CURRENT_SOURCE_DIR}/../oumuamua_bringup/config"
+		TIMEOUT 90
+		GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+	)
+	foreach(pickup_test_name pickup pickup_execution)
+		add_executable(${pickup_test_name}_test test/${pickup_test_name}_test.cpp)
+		target_link_libraries(${pickup_test_name}_test PRIVATE task_commander_geometry)
+		ament_add_test(${pickup_test_name}
+			COMMAND "$<TARGET_FILE:${pickup_test_name}_test>"
+			GENERATE_RESULT_FOR_RETURN_CODE_ZERO
+		)
+	endforeach()
 	add_executable(task_commander_geometry_test test/geometry_test.cpp)
 	target_link_libraries(task_commander_geometry_test PRIVATE task_commander_geometry)
 	ament_add_test(task_commander_geometry

@@ -36,11 +36,20 @@ ros2 run path_follower make_path.py route.yaml path_back.csv --reverse   # 同�
 - `obstacles` / `bounds` と、機体の外形 (`footprint` の多角形か `robot_radius` の円): 書いておくと、
   外形から障害物までの最小の間隔を出す (機体の向きも考える)。`min_clearance` より近ければ失敗して、経路ファイルを作らない
 - `lidar`: LiDAR の取付位置。図にその軌跡を描く
+- `footprint_file`: 経路YAMLからの相対パスで、添付形式の `footprint: "[[x,y],...]"` またはリストを読む。
+  埋込 `footprint` と併用しない。`footprint_yaw` [rad] で原形状からbase_linkへ回す。
+- `endpoint_footprint_file`: 同じ変換で入口・出口だけ検証する別形状。昇降下での通過を認める指定ではない。
+- `field_wall_padding` / `field_bounds_padding`: 共有フィールドを変えず、検証上の内壁を各面から拡大／外周内面を内側へ移す距離 [m]。
 - `--reverse`: 同じ経路を終点から始点へたどる経路ファイルを作る。各点での機体の向きは同じなので、
   行きで前を向いて通った所を、帰りは後ろ向きに通る
 
 経路ファイルは 1 行に `x, y, yaw` (フィールド座標系、yaw は ±pi で折り返さない) を並べた CSV。
 `#` で始まる行と見出しの行は読み飛ばす。経路ファイルは作ったものをリポジトリに入れておき、定義を変えたら作り直す。
+
+検証には、5桁へ丸めたCSV座標を使う。多角形の辺交差・包含・辺間距離を計算し、位置とyawの線形補間も含める。
+各区間を機体上の点の最大移動量が4 mm以下になるよう分割し、隣接サンプル間の移動上界の半分（2 mm以下）を
+測定値から引いた `conservative swept clearance` を出す。表示値が `min_clearance` 未満なら既存CSVを上書きしない。
+円指定は描画用の多角形近似でなく、真の円半径で検証する。これは理想軌道の幾何検証であり、実機の追従誤差は別途確認する。
 
 ## 走らせる
 
@@ -97,6 +106,8 @@ ros2 service call /path_follower/stop std_srvs/srv/Trigger     # 目標を出す
 
 ```bash
 colcon test --packages-select path_follower && colcon test-result --verbose
+# ROSのない環境で生成器だけテストする場合 (PyYAMLが必要):
+python -m unittest discover -s src/path_follower/test -p '*_test.py' -v
 ```
 
 台形・三角形の速度計画、曲がり角での減速、角速度の上限、両端で止まること、経路ファイルの読み込みを確認する。

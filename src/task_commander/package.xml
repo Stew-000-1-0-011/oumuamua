@@ -25,6 +25,9 @@
   <member_of_group>rosidl_interface_packages</member_of_group>
 
   <test_depend>ament_cmake_test</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>python3-yaml</test_depend>
+  <test_depend>python3-matplotlib</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -28,15 +28,20 @@
       - [-0.2, -0.3]
       - [0.3, -0.1]
     lidar: [0.28, 0.0]       # 任意。LiDAR の取付位置 (機体座標系)。図に軌跡を描く
+    footprint_file: ../footprints/raised.yaml  # 任意。埋込 footprint の代わりに外部YAMLを読む
+    footprint_yaw: 1.5707963267948966          # 原形状からbase_linkへ回す角度 [rad]
+    endpoint_footprint_file: ../footprints/lowered.yaml  # 同じ変換で、両端の下形状も検証する
     min_clearance: 0.03      # 任意。外形と障害物の間に最低これだけ空ける [m] (既定 0)
     field: ../field.yaml                     # 任意。フィールドのパラメータファイル (経路の定義からの相対パス)。
                                              # その field.bounds を bounds に、field.walls と field.shelf を obstacles に使う
+    field_wall_padding: 0.0025                # 任意。fieldの内壁だけを各面から拡大する [m]
+    field_bounds_padding: 0.005               # 任意。fieldの外周内面を内側へ移す [m]
     bounds: [xmin, ymin, xmax, ymax]         # 任意。走れる範囲 (外周壁の内側の面)。field より優先
     obstacles:                               # 任意。軸に平行な箱 [xmin, ymin, xmax, ymax]。field のものに足す
       - [0.8, -0.1, 0.9, 0.5]
 
-障害物を書いておくと、機体の外形 (向きも考える) から障害物までの最小の間隔を出し、
-min_clearance より小さければ失敗する (ファイルは作らない)。
+障害物を書いておくと、多角形の包含・辺交差と点間の位置/yaw補間を含めて検証する。
+表示する swept clearance は全区間の間隔の安全側の下限。min_clearance 未満なら失敗し、CSVは上書きしない。
 """
 import argparse
 import math
@@ -46,7 +51,7 @@ import sys
 import yaml
 
 
-def load_field(path):
+def load_field(path, wall_padding=0.0, bounds_padding=0.0):
     """フィールドのパラメータファイル (/**: ros__parameters: field: ...) から外周と障害物 (壁と棚) を読む。"""
     with open(path) as f:
         doc = yaml.safe_load(f)
@@ -54,9 +59,143 @@ def load_field(path):
     walls = [float(v) for v in field['walls']]
     if len(walls) % 4:
         raise ValueError(f'{path}: field.walls must be [xmin, ymin, xmax, ymax, ...]')
-    boxes = [walls[i:i + 4] for i in range(0, len(walls), 4)]
+    boxes = [[walls[i] - wall_padding, walls[i + 1] - wall_padding,
+              walls[i + 2] + wall_padding, walls[i + 3] + wall_padding]
+             for i in range(0, len(walls), 4)]
     boxes.append([float(v) for v in field['shelf']])
-    return {'bounds': [float(v) for v in field['bounds']], 'obstacles': boxes}
+    x0, y0, x1, y1 = map(float, field['bounds'])
+    return {'bounds': [x0 + bounds_padding, y0 + bounds_padding,
+                       x1 - bounds_padding, y1 - bounds_padding], 'obstacles': boxes}
+
+
+def polygon_points(value, yaw=0.0):
+    """Read either polygon YAML syntax, preserving concavities and source axes."""
+    if isinstance(value, str):
+        value = yaml.safe_load(value)
+    try:
+        points = [(float(x), float(y)) for x, y in value]
+    except (TypeError, ValueError) as e:
+        raise ValueError('footprint must contain [x, y] pairs') from e
+    if len(points) < 3 or not math.isfinite(yaw) or not all(math.isfinite(v) for p in points for v in p):
+        raise ValueError('footprint needs at least three finite vertices and a finite rotation')
+    c, s = math.cos(yaw), math.sin(yaw)
+    return [(c * x - s * y, s * x + c * y) for x, y in points]
+
+
+def load_footprint(path, yaw=0.0):
+    with open(path) as f:
+        doc = yaml.safe_load(f)
+    return polygon_points(doc['footprint'] if isinstance(doc, dict) else doc, yaw)
+
+
+def load_route(path):
+    with open(path) as f:
+        route = yaml.safe_load(f)
+    directory = os.path.dirname(os.path.abspath(path))
+    yaw = float(route.get('footprint_yaw', 0.0))
+    if route.get('footprint_file'):
+        if route.get('footprint'):
+            raise ValueError('choose footprint_file or footprint, not both')
+        route['footprint'] = load_footprint(os.path.join(directory, route['footprint_file']), yaw)
+    elif route.get('footprint'):
+        route['footprint'] = polygon_points(route['footprint'], yaw)
+    if route.get('endpoint_footprint_file'):
+        route['_endpoint_footprint'] = load_footprint(os.path.join(directory, route['endpoint_footprint_file']), yaw)
+    for key in ('field_wall_padding', 'field_bounds_padding', 'robot_radius', 'min_clearance'):
+        value = float(route.get(key, 0.0))
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f'{key} must be finite and nonnegative')
+    return route
+
+
+def point_in_polygon(point, polygon):
+    x, y = point
+    inside = False
+    for a, b in zip(polygon, polygon[1:] + polygon[:1]):
+        if (a[1] > y) != (b[1] > y):
+            if x < a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]):
+                inside = not inside
+    return inside
+
+
+def point_segment_distance(p, a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length2 = dx * dx + dy * dy
+    t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length2)) if length2 else 0.0
+    return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+
+
+def segments_intersect(a, b, c, d):
+    def cross(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    if max(a[0], b[0]) < min(c[0], d[0]) or max(c[0], d[0]) < min(a[0], b[0]):
+        return False
+    if max(a[1], b[1]) < min(c[1], d[1]) or max(c[1], d[1]) < min(a[1], b[1]):
+        return False
+    return cross(a, b, c) * cross(a, b, d) <= 0 and cross(c, d, a) * cross(c, d, b) <= 0
+
+
+def polygon_clearance(polygon, bounds, obstacles):
+    """Exact polygon/axis-aligned rectangle distance, zero on containment/contact.
+
+    Negative values indicate an outline beyond the outer bounds. Bounding boxes
+    only prune distant obstacles; they never replace the concave body polygon.
+    """
+    xmin = min(p[0] for p in polygon); xmax = max(p[0] for p in polygon)
+    ymin = min(p[1] for p in polygon); ymax = max(p[1] for p in polygon)
+    best = min(xmin - bounds[0], bounds[2] - xmax, ymin - bounds[1], bounds[3] - ymax) if bounds else float('inf')
+    if best <= 0:
+        return best
+    edges = list(zip(polygon, polygon[1:] + polygon[:1]))
+    for x0, y0, x1, y1 in obstacles:
+        if math.hypot(max(x0 - xmax, xmin - x1, 0), max(y0 - ymax, ymin - y1, 0)) >= best:
+            continue
+        box = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+        if any(x0 <= x <= x1 and y0 <= y <= y1 for x, y in polygon) or any(point_in_polygon(p, polygon) for p in box):
+            return 0.0
+        for a, b in edges:
+            if any(segments_intersect(a, b, c, d) for c, d in zip(box, box[1:] + box[:1])):
+                return 0.0
+        # Disjoint segment distance attains its minimum at an endpoint of one
+        # segment. Polygon vertices -> box, and box vertices -> polygon edges.
+        best = min(best, *(math.hypot(max(x0 - x, 0, x - x1), max(y0 - y, 0, y - y1)) for x, y in polygon))
+        best = min(best, *(point_segment_distance(p, a, b) for p in box for a, b in edges))
+    return best
+
+
+def pose_clearance(pose, route, bounds, obstacles):
+    if route.get('footprint'):
+        return polygon_clearance([to_field(pose, p) for p in route['footprint']], bounds, obstacles)
+    return clearance(pose[0], pose[1], bounds, obstacles) - float(route.get('robot_radius', 0.0))
+
+
+def validate_path(path, route, bounds, obstacles):
+    """Conservative clearance of the CSV's linear position and unwrapped yaw.
+
+    Any body point moves at most |translation| + R*|delta yaw|. Subdivide
+    until this bound is <=4 mm; every intermediate pose is within <=2 mm
+    of a checked pose. Subtract half the bound from the smaller endpoint
+    clearance of each subinterval. Thus the result bounds the whole sweep,
+    rather than only a set of samples (also for concave footprints).
+    """
+    if not path or not all(math.isfinite(v) for pose in path for v in pose):
+        raise ValueError('path needs finite poses')
+    radius = max((math.hypot(*p) for p in route['footprint']), default=0.0) if route.get('footprint') else float(route.get('robot_radius', 0.0))
+    worst = (pose_clearance(path[0], route, bounds, obstacles), path[0])
+    for a, b in zip(path, path[1:]):
+        translation = math.hypot(b[0] - a[0], b[1] - a[1])
+        motion = translation + radius * abs(b[2] - a[2])
+        n = max(1, math.ceil(motion / .004))
+        previous = pose_clearance(a, route, bounds, obstacles)
+        for k in range(1, n + 1):
+            u = k / n
+            pose = tuple(v + u * (w - v) for v, w in zip(a, b))
+            current = pose_clearance(pose, route, bounds, obstacles)
+            bound = min(previous, current) - motion / (2 * n)
+            if bound < worst[0]:
+                worst = (bound, pose)
+            previous = current
+    return worst
 
 
 def rounded_polyline(corners, spacing):
@@ -157,9 +296,10 @@ def main():
     parser.add_argument('--reverse', action='store_true', help='write the path from its last point back to its first, with the same heading at each point')
     args = parser.parse_args()
 
-    with open(args.route) as f:
-        route = yaml.safe_load(f)
+    route = load_route(args.route)
     spacing = float(route.get('spacing', 0.01))
+    if not math.isfinite(spacing) or spacing <= 0:
+        raise ValueError('spacing must be finite and positive')
     xy, length = rounded_polyline(route['corners'], spacing)
     keys = sorted((float(s), float(y)) for s, y in route.get('yaw', [[0.0, 0.0]]))
     stations = [length * i / (len(xy) - 1) for i in range(len(xy))]
@@ -181,14 +321,16 @@ def main():
             u = min(max((s - s0) / blend, 0.0), 1.0, max((s1 - s) / blend, 0.0))
             w = u * u * (3 - 2 * u)
             yaws[i] = (1 - w) * yaws[i] + w * tangent[i]
-    path = [(x, y, yaw) for (x, y), yaw in zip(xy, yaws)]
+    # Validate exactly the poses consumed by trajectory.cpp, after CSV rounding.
+    path = [tuple(round(v, 5) for v in (x, y, yaw)) for (x, y), yaw in zip(xy, yaws)]
     if args.reverse:
         path.reverse()
 
     bounds = route.get('bounds')
     obstacles = list(route.get('obstacles', []))
     if route.get('field'):
-        field = load_field(os.path.join(os.path.dirname(os.path.abspath(args.route)), route['field']))
+        field = load_field(os.path.join(os.path.dirname(os.path.abspath(args.route)), route['field']),
+                           float(route.get('field_wall_padding', 0.0)), float(route.get('field_bounds_padding', 0.0)))
         bounds = bounds or field['bounds']
         obstacles = field['obstacles'] + obstacles
     radius = float(route.get('robot_radius', 0.0))
@@ -197,18 +339,16 @@ def main():
     lidar = tuple(float(v) for v in route['lidar']) if route.get('lidar') else None
     print(f'{len(path)} points, {length:.2f} m, from ({path[0][0]:.3f}, {path[0][1]:.3f}) to ({path[-1][0]:.3f}, {path[-1][1]:.3f})')
     worst = None
+    endpoint_worst = None
     if bounds or obstacles:
-        # 外形の各点から障害物までの間隔。機体の向きも入っている
-        worst = (float('inf'), None, None)
-        for pose in path:
-            for p in body:
-                q = to_field(pose, p)
-                c = clearance(q[0], q[1], bounds, obstacles)
-                if c < worst[0]:
-                    worst = (c, pose, q)
+        worst = validate_path(path, route, bounds, obstacles)
         shape = 'footprint polygon' if route.get('footprint') else f'circle of radius {radius:.2f} m'
-        print(f'min clearance of the robot outline ({shape}): {worst[0]:.3f} m, '
-              f'with the robot at ({worst[1][0]:.3f}, {worst[1][1]:.3f}, yaw {worst[1][2]:.2f}), outline point ({worst[2][0]:.3f}, {worst[2][1]:.3f})')
+        print(f'conservative swept clearance ({shape}): {worst[0]:.6f} m, '
+              f'near robot pose ({worst[1][0]:.3f}, {worst[1][1]:.3f}, yaw {worst[1][2]:.2f})')
+        if route.get('_endpoint_footprint'):
+            low = {'footprint': route['_endpoint_footprint']}
+            endpoint_worst = min((pose_clearance(pose, low, bounds, obstacles), pose) for pose in (path[0], path[-1]))
+            print(f'lowered endpoint clearance: {endpoint_worst[0]:.6f} m')
 
     if args.plot:
         import matplotlib
@@ -228,6 +368,11 @@ def main():
             x, y, yaw = pose
             ax.annotate('', xy=(x + 0.16 * math.cos(yaw), y + 0.16 * math.sin(yaw)), xytext=(x, y),
                         arrowprops={'arrowstyle': '->', 'color': '#888', 'lw': 1.0})
+        if route.get('_endpoint_footprint'):
+            for i, pose in enumerate((path[0], path[-1])):
+                ax.add_patch(Polygon([to_field(pose, p) for p in route['_endpoint_footprint']],
+                                     closed=True, fill=False, ec='#923fad', lw=1.5,
+                                     label='lowered body at endpoints' if i == 0 else None))
         ax.plot(xs, ys, color='#2a78d6', lw=2.4, label=f'robot centre ({length:.2f} m; grey arrows: heading)')
         if lidar:
             lx, ly = zip(*(to_field(pose, lidar) for pose in path))
@@ -235,19 +380,19 @@ def main():
         ax.plot(xs[0], ys[0], 'o', color='#1a9c4b', ms=9, label='start')
         ax.plot(xs[-1], ys[-1], 's', color='#d6452a', ms=9, label='goal')
         if worst:
-            ax.plot(worst[2][0], worst[2][1], 'x', color='k', ms=9, mew=2, label=f'closest the outline gets: {worst[0]:.2f} m')
+            ax.plot(worst[1][0], worst[1][1], 'x', color='k', ms=9, mew=2, label=f'limiting robot pose; swept clearance >= {worst[0]:.3f} m')
         ax.set_aspect('equal'); ax.autoscale_view(); ax.margins(0.03)
         ax.set_xlabel('x [m]'); ax.set_ylabel('y [m]'); ax.grid(True, alpha=0.25)
         ax.legend(loc='lower left', fontsize=9, framealpha=0.95)
         fig.tight_layout(); fig.savefig(args.plot)
         print(f'wrote {args.plot}')
 
-    if worst and worst[0] < margin:
-        print(f'error: the robot outline comes within {worst[0]:.3f} m of an obstacle (min_clearance {margin:.2f} m); not writing {args.output}', file=sys.stderr)
+    if (worst and worst[0] < margin) or (endpoint_worst and endpoint_worst[0] < margin):
+        print(f'error: swept body or lowered endpoint violates min_clearance {margin:.3f} m; not writing {args.output}', file=sys.stderr)
         return 1
 
     with open(args.output, 'w') as f:
-        f.write(f'# generated by make_path.py from {args.route}{" (--reverse)" if args.reverse else ""}. do not edit by hand; edit the route and regenerate\n')
+        f.write(f'# generated by make_path.py from {os.path.basename(args.route)}{" (--reverse)" if args.reverse else ""}. do not edit by hand; edit the route and regenerate\n')
         f.write(f'# {len(path)} points, {length:.3f} m\n')
         f.write('x,y,yaw\n')
         for x, y, yaw in path:

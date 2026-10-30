@@ -6,7 +6,7 @@
 
 | 番号 | 作業 | 引数 | すること |
 | --- | --- | --- | --- |
-| 0 | `PICK` | `gripper`, `block` | 昇降を clear に上げ、ブロックの真上の手前 (`pick.standoff`) へ動き、真上へ寄る。昇降を pick に下ろして吸引をオン、carry に上げて手前へ戻る |
+| 0 | `PICK` | `gripper`, `block` | 実形状で計画後、全昇降carryで手前へ移動。選択側clearで接近し、pick・吸引・carry到達確認の後に退避 |
 | 1 | `TO_SLALOM_ENTRANCE` | | 昇降を全部 carry にして、スラロームの入口へ (今の位置から直線) |
 | 2 | `TO_START` | | 同じく、スタート地点へ |
 | 3 | `SLALOM_FORWARD` | | 昇降を全部 carry にして、経路 `slalom_forward` (入口 -> 出口) を走る |
@@ -39,6 +39,57 @@ ros2 topic echo /task_commander/state    # 持っているか・回収したブ�
   吸着面の中心がブロックやマスの中心に来る機体の姿勢を計算する
 - 昇降の高さは gripper.yaml の `lift.positions` の番号で指す (`lift.pick`, `lift.clear`, `lift.carry`, `lift.row_approach`, `lift.row_release`)
 - スラロームの入口・出口は `config/paths/slalom.route.yaml` の始点・終点と合わせる
+
+## 5箱の回収設定
+
+`oumuamua_bringup/config/field.yaml` の既存キーに、箱の初期中心x座標を5個 [m] 指定する。
+
+```yaml
+notes_x: [-2.699, -2.499, -2.299, -2.099, -1.899] # 暫定例。実測値へ置換する
+notes_y: 0.125
+note_size: 0.15
+```
+
+配列順が箱番号0〜4で、内部では並べ替えない。個数自体は設定依存で、コードに5を固定していない。
+空配列、非有限値、重複・接触/重なり、壁やフィールド外にある箱は拒否する。
+robot側とcontroller bridgeに同じfieldファイルを読ませ、変更後は再ビルド・関連ノードを再起動する。
+controllerは `notes_x` の個数から5個の回収ボタンを作り、保持/回収状態をこのノードから受け取るため、通信方式や入力画面の追加は不要。
+
+PICKでは、共有の `footprints/raised.yaml` / `lowered.yaml` を+pi/2でbase_linkへ変換し、
+壁・残箱・姿勢変化を含む点間の外形を検査する。吸着接触の除外は `pick.contact_regions` の選択側だけで、
+足回りや反対側の機構を対象箱の検査から外さない。clear中も全下形状を使うため、反対側は上がっている実機より保守的な判定となる。
+優先yaw・通路・手前距離は `pick.*` で指定する。候補yawが通れなければ指定範囲内を `yaw_resolution` で細かく調べる。
+真っすぐの接近を優先し、隣の箱を避けるために外側(+y)の斜め接近も検査する。
+
+暫定の密な配置では最初に箱4を左(gripper0)で回収する候補が有効。
+各箱を運搬・配置してから戻る運用では、右側の箱から4→3→2→1→0の順で全5箱の経路を確認している。
+どの箱/左右の組合せでも常に回収できるという意味ではなく、現在の残箱と実際の自己位置で毎回検査する。
+図と可否一覧は `docs/superpowers/artifacts/pickup/` を参照。1アクションで5個を自動連続回収する機能ではない。
+
+PICKの昇降には取り消し可能な既存 `gripper/action/MoveLift` を使う。
+高さ・許容差はlaunchが実際の `gripper_params` の共通/個別 `lift.positions` / `tolerance` から解決する。
+`carry - pick` は箱・実物の壁の高さ+余裕より大きい必要があり、満たさなければ起動設定を拒否する。
+実機は新しいCANフィードバックと目標高さへの到達を確認する。明示した `sim:=true` のみ指令値による模擬到達を許可する。
+自動回収後の昇降目標は高さ指定なので、状態の `lift_position` は -1 となり得る。
+
+吸引要求前の失敗では箱を未回収のまま残す。吸引要求を出した後で応答が不明、carry失敗、取り消しになった場合は、
+箱と把持機構を「状態不明・使用不可」として記録し、自動タスクを拒否する。床の障害物としても残す。
+`~/state` の従来のholding/picked表示は使用不可を伝え、追加の `uncertain grippers:` 行で理由を示す。
+箱の実位置と機構を確認・復旧してから `~/reset` を明示的に呼ぶ。退避だけの失敗では保持中の記録を維持する。
+吸引圧センサーはないため、保持成立の物理的な実測保証ではない。工具中心・接触領域・昇降高さは実機で校正する。
+
+この環境でのオフラインテスト:
+
+```bash
+g++ -std=c++23 -O2 -Isrc/task_commander/include src/task_commander/src/geometry.cpp src/task_commander/src/pickup.cpp src/task_commander/test/pickup_test.cpp -o /tmp/pickup_test
+/tmp/pickup_test
+g++ -std=c++23 -O2 -Isrc/task_commander/include src/task_commander/src/pickup_execution.cpp src/task_commander/test/pickup_execution_test.cpp -o /tmp/pickup_execution_test
+/tmp/pickup_execution_test
+python src/oumuamua_bringup/test/pickup_parameters_test.py
+```
+
+ROS環境では `colcon test --packages-select task_commander oumuamua_bringup` で実ノードと模擬action/serviceを使う接続テストも行う。
+PICKの形状/高さパラメータはbringupが生成するため、通常は `bringup.launch.py` 経由で起動する。
 
 ## 構成
 
