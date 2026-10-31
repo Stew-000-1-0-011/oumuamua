@@ -37,11 +37,15 @@ tracker_node:
     heading_lookahead: 0.01     # [s] 機体座標系へ回すときの yaw の先読み (制御周期の半分くらい)
 
     # --- 制限 (<= 0 で無効) ---
-    # 追従の上限。どれも外してある (速さと加速は path_follower の計画で決まる)
+    # 追従の上限。指令の跳ね (目標に遅れたときのフィードバック) で車輪が頭打ちになり、機体が回るのを抑える
+    # (2026-10-31 の記録 slalom2 では、制限なしで向きが最大 19〜30 度ずれた)。
+    # 並進の加速度は向きによらない大きさで抑えるので、進む向きの加減速と曲がるときの横加速度の両方に効く。
+    # path_follower の計画 (加減速 2.0、横加速度 2.0 m/s^2) では、両方が重なる所で合わせて 2.82 m/s^2 になるので、
+    # それより少し上にしてある。スラロームの計画の最高速度は 1.2 m/s。角加速度は制限しない
     limits:
-      max_velocity_linear: 0.0   # [m/s] 制限しない
-      max_velocity_angular: 0.0  # [rad/s] 制限しない
-      max_accel_linear: 0.0      # [m/s^2] 制限しない
+      max_velocity_linear: 3.0   # [m/s]
+      max_velocity_angular: 9.42 # [rad/s] path_follower の max_yaw_rate (1.5 回転/s) と同じ
+      max_accel_linear: 3.0      # [m/s^2] 加減速と横加速度を合わせた大きさ
       max_accel_angular: 0.0     # [rad/s^2] 制限しない
 
     # --- pose_source: odom のとき ---

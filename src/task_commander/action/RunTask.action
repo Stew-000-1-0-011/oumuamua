@@ -5,11 +5,12 @@ uint8 TO_SLALOM_ENTRANCE = 1 # スラロームの入口へ移動する (スタ�
 uint8 TO_START = 2           # スタート地点へ移動する
 uint8 SLALOM_FORWARD = 3     # スラロームの往路 (入口 -> 出口)
 uint8 SLALOM_BACKWARD = 4    # スラロームの復路 (出口 -> 入口)
-uint8 TO_SHELF_CELL = 5      # 把持機構 gripper の吸ったノーツが、棚の列 column (0..2) のマスに入る位置と向きへ移動する。
-                             # 昇降と吸引は変えない (段の高さに上げる・吸引を切って置くのは手で)
+uint8 TO_SHELF_CELL = 5      # 今の y のまま横へ動き、把持機構 gripper の吸ったノーツの x を棚の列 column (0..2) の中心に合わせる。
+                             # 前後 (棚へ差し込む)・昇降・吸引は変えない (手で)
 uint8 TO_SLALOM_EXIT = 6     # スラロームの出口へ移動する (ゴールゾーン側)
 uint8 TO_SHELF_FRONT = 7     # 棚の前へ、棚の方を向いて移動する (吸ったノーツの前の面が棚の中心面から shelf.front_distance)
-uint8 PICK_PAIR = 8          # gripper0 でブロック block、gripper1 でブロック block - 1 を同時に回収する
+uint8 PICK_PAIR = 8          # ブロック block と block - 1 を同時に回収する。青コートなら gripper0 (左) が block、
+                             # 赤コートなら gripper1 (右) が block (コートが反転すると、外周の壁の側が左右逆になる)
                              # (task_commander.yaml の pick.pairs に姿勢がある組だけ。今は block 4 (4 と 3) と 2 (2 と 1))
 
 uint8 type

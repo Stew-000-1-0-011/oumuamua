@@ -126,9 +126,17 @@ namespace {
 
 			// --- 初期姿勢 ---
 			// 機体のスタート位置 (field.start_pose。sotoba の初期シードの元) に、真値のずれを足す
-			const auto start = this->declare_parameter<std::vector<double>>("field.start_pose");
+			auto start = this->declare_parameter<std::vector<double>>("field.start_pose");
 			if (start.size() != 3) {
 				throw std::invalid_argument("field.start_pose must be [x, y, yaw]");
+			}
+			// start_pose は自チームが +y 側にあるとして書いてある。赤 (-y 側) なら y について反転する
+			const auto team = this->declare_parameter<std::string>("field.team");
+			if (team != "blue" && team != "red") {
+				throw std::invalid_argument("field.team must be blue or red");
+			}
+			if (team == "red") {
+				start = {start[0], -start[1], -start[2]};
 			}
 			this->initial_ = Pose2{
 				.x = start[0] + this->declare_parameter<double>("start_offset_x"),

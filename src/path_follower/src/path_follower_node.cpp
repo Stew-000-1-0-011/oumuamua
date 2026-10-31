@@ -49,6 +49,8 @@ namespace {
 			const auto path_file = this->declare_parameter<std::string>("path_file");
 			const auto path_dir = this->declare_parameter<std::string>("path_dir");
 			const auto path_names = this->declare_parameter<std::vector<std::string>>("paths");
+			// 経路ファイルを y について反転して使う (自チームが +y 側として作った経路を、赤コート (-y 側) で走るとき)
+			const bool mirror_y = this->declare_parameter<bool>("mirror_y");
 			const auto reference_topic = this->declare_parameter<std::string>("reference_topic");
 			const auto odom_topic = this->declare_parameter<std::string>("odom_topic");
 			this->frame_id_ = this->declare_parameter<std::string>("frame_id");
@@ -83,7 +85,14 @@ namespace {
 			for (const auto& [name, file] : files) {
 				std::ifstream in{file};
 				if (!in) { throw std::invalid_argument("cannot open path file '" + file + "'"); }
-				const auto& route = this->routes_.emplace_back(name, Trajectory{path_follower::load_path_csv(in), limits});
+				auto points = path_follower::load_path_csv(in);
+				if (mirror_y) {
+					for (auto& p : points) {
+						p.y = -p.y;
+						p.yaw = -p.yaw;
+					}
+				}
+				const auto& route = this->routes_.emplace_back(name, Trajectory{std::move(points), limits});
 				const auto& first = route.trajectory.points().front();
 				const auto& last = route.trajectory.points().back();
 				RCLCPP_INFO(

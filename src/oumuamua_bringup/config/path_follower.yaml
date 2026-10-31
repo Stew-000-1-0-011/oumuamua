@@ -10,22 +10,26 @@ path_follower:
     #   slalom_forward / slalom_backward: task_commander がスラロームの往復に使う (~/follow で名前を指定)
     paths: [slalom_forward, slalom_backward]
     path_file: ""
+    # 経路ファイルを y について反転して使うか。経路は自チームが +y 側 (青コート) として作ってある。
+    # bringup.launch.py が team 引数で上書きする (red なら true)
+    mirror_y: false
     reference_topic: /tracker_node/reference   # 追従ノードへの目標 (holonomic_tracker/msg/TrackingReference)
     odom_topic: /state_estimator/odom          # 自己位置 (始点の確認と、機体の遅れを見るのに使う)
     frame_id: field
     rate: 50.0                                 # [Hz] 目標を出す周期
 
     # 速度計画の上限。この範囲でできるだけ速く走り、両端で止まる。計画には有限の上限が要るので、ここだけは残してある。
-    # 追従 (tracker_node) と足回り (chassis_node) の上限は外してあり、車輪のモータ基板の wmax も実質的に外してある
-    # (300 rad/s。モータは 24 V で無負荷約 267 rad/s)。ここの値は物理的な上限の見積もり:
-    #   最高速度 7.0 m/s (無負荷 267 rad/s x 車輪半径 0.029 m = 7.7 m/s)、加減速と横加速度 5 m/s^2、角速度 1.5 回転/s。
-    # 機体がこの計画に付いてこられないと、目標が先に行ってしまい、追いつくのを待って止まったり動いたりする
-    # (実機の記録 2026-10-12 run3 / run4 で出ていた加速は 2〜2.5 m/s^2。電流の上限 imax 8 A と滑り)。
+    # 追従 (tracker_node) は、加減速と横加速度を合わせた大きさを 3.0 m/s^2 に抑える。足回り (chassis_node) は車輪 250 rad/s を超えるときだけ全車輪を同じ割合で縮め、
+    # 車輪のモータ基板の wmax は 300 rad/s (モータは 24 V で無負荷約 267 rad/s)。
+    # 加減速と横加速度は実測に合わせてある: 2026-10-31 の記録 slalom3 (電流の上限 imax 12 A) で、機体の加速度の大きさは
+    # 中央値 0.55、上位 10% 1.25、上位 1% 2.44、最大 2.71 m/s^2。続けて出せるのは 1.25 前後なので、上位 1% より少し下の 2.0。
+    # 5 m/s^2 で計画したときは、目標が先に行って 0.3 m 遅れで待たされ、追従の指令が跳ねて車輪が頭打ちになり、機体が回った。
+    # 最高速度 (7.0 m/s。無負荷 267 rad/s x 車輪半径 0.029 m = 7.7 m/s) と角速度 (1.5 回転/s) は物理的な上限の見積もり。
     # 足回りが指令に約 0.18 s 遅れて付いてくるぶん、速いほど曲がり角を内側へ切る。上げるときは走行を記録して壁との間隔を見ること
     limits:
       max_speed: 7.0           # [m/s]
-      max_accel: 5.0           # [m/s^2] 進む向きの加減速
-      max_lateral_accel: 5.0   # [m/s^2] 曲がるときの横加速度。半径 0.30 m の角を 1.22 m/s で回る
+      max_accel: 2.0           # [m/s^2] 進む向きの加減速
+      max_lateral_accel: 2.0   # [m/s^2] 曲がるときの横加速度。半径 0.30 m の角を 0.77 m/s で回る
       max_yaw_rate: 9.42       # [rad/s] 1.5 回転/s
 
     # ~/start のとき、機体が経路の始点からこれより離れていたら始めない [m]。0 以下で確認しない

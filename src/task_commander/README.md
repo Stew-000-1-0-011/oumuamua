@@ -11,7 +11,7 @@
 | 2 | `TO_START` | | 同じく、スタート地点へ |
 | 3 | `SLALOM_FORWARD` | | 昇降を全部 carry にして、経路 `slalom_forward` (入口 -> 出口) を走る |
 | 4 | `SLALOM_BACKWARD` | | 同じく、経路 `slalom_backward` (出口 -> 入口) を走る |
-| 5 | `TO_SHELF_CELL` | `gripper`, `column` | マスの手前 (`place.standoff`) から、把持機構 `gripper` の吸ったノーツが列 `column` のマスに入る位置と向きへ進む。昇降と吸引は変えない (段の高さに上げる・吸引を切って置くのは手で)。`row` は使わない |
+| 5 | `TO_SHELF_CELL` | `gripper`, `column` | 今の y のまま横へ動き、把持機構 `gripper` の吸ったノーツの x を列 `column` の中心に合わせて、棚の方 (`place.yaw`) を向く。前後 (棚へ差し込む)・昇降・吸引は変えない (手で)。`row` は使わない |
 | 6 | `TO_SLALOM_EXIT` | | 昇降を全部 carry にして、スラロームの出口へ (今の位置から直線) |
 | 7 | `TO_SHELF_FRONT` | | 昇降を全部 carry にして、棚の前へ。中央の列の正面で棚の方を向き、吸ったノーツの前の面 (機体から遠い面) が棚の中心面から `shelf.front_distance` (0.33 m) の所 |
 | 8 | `PICK_PAIR` | `block` | gripper0 でブロック `block`、gripper1 でブロック `block - 1` を同時に回収する。姿勢は `pick.pairs` (今は 4 と 3、2 と 1)。手順は `PICK` と同じで、昇降と吸引は 2 つ同時に動かす |
@@ -40,7 +40,7 @@ ros2 topic echo /task_commander/state    # 持っているか・回収したブ�
 `oumuamua_bringup/config/task_commander.yaml` にある。場所はフィールド座標系 `[x, y, yaw]`。
 
 - 吸着面の中心の位置 (`grippers.suction_offsets`、機体座標系) から、吸ったノーツの中心 (ノーツの大きさの半分だけ前) を求め、
-  棚では、それがマスに来る機体の姿勢 (向きは `place.yaw`) を計算する
+  棚では、それの x が列の中心に来る機体の位置 (向きは `place.yaw`) を計算する
 - 昇降の高さは gripper.yaml の `lift.positions` の番号で指す (`lift.pick`, `lift.clear`, `lift.carry`)
 - スラロームの入口・出口は `config/paths/slalom.route.yaml` の始点・終点と合わせる
 

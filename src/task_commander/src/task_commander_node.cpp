@@ -5,13 +5,13 @@
 /// | --- | --- |
 /// | PICK (gripper, block) | 昇降を clear に上げて吸引をオン、経由点 (pick.via) と手前 (pick.standoff) を通って、回収の姿勢
 /// |                       | (pick.poses) へ寄り、昇降を pick に下ろしきって grip_time 待ち、carry に上げて、手前へ戻る |
-/// | PICK_PAIR (block)     | gripper0 で block、gripper1 で block - 1 を同時に回収する。姿勢は pick.pairs。手順は PICK と同じ |
+/// | PICK_PAIR (block)     | 青なら gripper0 で block、gripper1 で block - 1 を (赤なら左右が逆)、同時に回収する。姿勢は pick.pairs。手順は PICK と同じ |
 /// | TO_SLALOM_ENTRANCE    | 昇降を carry にして、スラロームの入口へ (今の位置から直線) |
 /// | TO_START              | 昇降を carry にして、スタート地点へ (今の位置から直線) |
 /// | SLALOM_FORWARD        | 昇降を carry にして、経路 slalom.forward_route を走る (入口 -> 出口) |
 /// | SLALOM_BACKWARD       | 昇降を carry にして、経路 slalom.backward_route を走る (出口 -> 入口) |
-/// | TO_SHELF_CELL (gripper, column) | マスの手前 (place.standoff) から、把持機構 gripper の吸ったノーツが列 column のマスに
-/// |                       | 入る位置と向きへ進む。昇降と吸引は変えない (段の高さに上げる・吸引を切るのは手で) |
+/// | TO_SHELF_CELL (gripper, column) | 今の y のまま、把持機構 gripper の吸ったノーツの x が列 column の中心に来るように横へ動き、
+/// |                       | 棚の方 (place.yaw) を向く。前後 (棚へ差し込む)・昇降・吸引は手で |
 /// | TO_SLALOM_EXIT        | 昇降を carry にして、スラロームの出口へ (今の位置から直線) |
 /// | TO_SHELF_FRONT        | 昇降を carry にして、棚の前 (中央の列の正面、吸ったノーツの前の面が棚の中心面から
 /// |                       | shelf.front_distance) へ (今の位置から直線) |
@@ -93,6 +93,17 @@ namespace {
 		TaskCommanderNode() : rclcpp::Node("task_commander") {
 			this->group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 
+			// --- 自チームの色 ---
+			// このノードは、自チームが +y 側にある座標 (青コートの座標。以下「自チームの座標」) で考える。
+			// 赤 (-y 側) なら、フィールドの形・機体の左右を y について反転して取り込み、自己位置を受け取るときと
+			// path_follower へ目標を送るときに反転する。反転した世界では機体も鏡写しなので、左右の把持機構の役が入れ替わる
+			const auto team = this->declare_parameter<std::string>("field.team");
+			if (team != "blue" && team != "red") {
+				throw std::invalid_argument("field.team must be blue or red");
+			}
+			this->red_ = team == "red";
+			const auto mirror_box = [this](const Box& b) { return this->red_ ? Box{b.xmin, -b.ymax, b.xmax, -b.ymin} : b; };
+
 			// --- フィールド (field.yaml の field.*) と機体 ---
 			const auto bounds = this->declare_parameter<std::vector<double>>("field.bounds");
 			auto walls = task_commander::boxes_from_flat(this->declare_parameter<std::vector<double>>("field.walls"), "field.walls");
@@ -100,11 +111,19 @@ namespace {
 			if (bounds.size() != 4 || shelf.size() != 1) {
 				throw std::invalid_argument("field.bounds and field.shelf must be [xmin, ymin, xmax, ymax]");
 			}
-			this->field_.bounds = Box{bounds[0], bounds[1], bounds[2], bounds[3]};
+			this->field_.bounds = mirror_box(Box{bounds[0], bounds[1], bounds[2], bounds[3]});
 			// 棚も壁と同じく避ける
 			walls.push_back(shelf.front());
+			for (auto& w : walls) {
+				w = mirror_box(w);
+			}
 			this->walls_ = walls;
 			this->footprint_ = task_commander::footprint_from_flat(this->declare_parameter<std::vector<double>>("footprint"), "footprint");
+			if (this->red_) {
+				for (auto& p : this->footprint_) {
+					p.y = -p.y;
+				}
+			}
 			this->min_clearance_ = this->declare_parameter<double>("min_clearance");
 
 			// --- 場所 ---
@@ -121,17 +140,15 @@ namespace {
 			this->picked_.assign(this->blocks_x_.size(), false);
 			this->pick_via_ = pose_from(this->declare_parameter<std::vector<double>>("pick.via"), "pick.via");
 			this->pick_standoff_ = this->declare_parameter<double>("pick.standoff");
+			this->pick_red_extra_reach_ = this->declare_parameter<double>("pick.red_extra_reach");
 			this->grip_time_ = this->declare_parameter<double>("pick.grip_time");
 
-			// 棚 (ビンゴ): 列の中心の x、自チーム側の面の y (棚の箱の ymax)、ブロックの中心を面からどれだけ奥に入れるか
+			// 棚 (ビンゴ): 列の中心の x と、棚の中心面の y
 			this->columns_x_ = this->declare_parameter<std::vector<double>>("field.shelf_columns_x");
 			this->rows_ = static_cast<int>(this->declare_parameter<std::int64_t>("field.shelf_rows"));
-			this->shelf_face_y_ = shelf.front().ymax;
 			this->shelf_center_y_ = 0.5 * (shelf.front().ymin + shelf.front().ymax);
 			const double front_distance = this->declare_parameter<double>("shelf.front_distance");
-			this->place_depth_ = this->declare_parameter<double>("shelf.place_depth");
 			this->place_yaw_ = this->declare_parameter<double>("place.yaw");
-			this->place_standoff_ = this->declare_parameter<double>("place.standoff");
 
 			// 昇降の高さは gripper.yaml の lift.positions の番号で指す
 			this->lift_pick_ = static_cast<int>(this->declare_parameter<std::int64_t>("lift.pick"));
@@ -156,7 +173,7 @@ namespace {
 				g.name = names[i];
 				// 吸着面は機体の前を向いているので、吸ったノーツの中心は吸着面の中心からノーツの大きさの半分だけ前
 				g.offset_x = suction[2 * i] + 0.5 * this->block_size_;
-				g.offset_y = suction[2 * i + 1];
+				g.offset_y = this->red_ ? -suction[2 * i + 1] : suction[2 * i + 1];
 				g.lift = this->create_client<gripper::srv::SetLiftPosition>("/" + g.name + "/set_lift_position", rclcpp::ServicesQoS{}, this->group_);
 				g.suction = this->create_client<std_srvs::srv::SetBool>("/" + g.name + "/set_suction", rclcpp::ServicesQoS{}, this->group_);
 				rclcpp::SubscriptionOptions options{};
@@ -218,7 +235,9 @@ namespace {
 					throw std::invalid_argument(name + " must be [x, y, yaw] for each gripper");
 				}
 				for (std::size_t i = 0; i < this->grippers_.size(); ++i) {
-					this->grippers_[i].pick_poses.push_back(Pose2{v[3 * i], v[3 * i + 1], v[3 * i + 2]});
+					// 赤では左右の把持機構の役が入れ替わる (青で gripper0 の列の姿勢は、赤では gripper1 の姿勢)
+					const std::size_t column = this->red_ && this->grippers_.size() == 2 ? 1 - i : i;
+					this->grippers_[i].pick_poses.push_back(Pose2{v[3 * column], v[3 * column + 1], v[3 * column + 2]});
 				}
 			}
 
@@ -232,10 +251,10 @@ namespace {
 				[this](const nav_msgs::msg::Odometry& m) {
 					const auto& q = m.pose.pose.orientation;
 					const std::scoped_lock lock{this->mutex_};
-					this->odom_ = Pose2{
+					this->odom_ = this->mirror(Pose2{
 						m.pose.pose.position.x, m.pose.pose.position.y,
 						std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z)),
-					};
+					});
 					this->odom_stamp_ = this->now();
 				},
 				options
@@ -450,6 +469,9 @@ namespace {
 		// ---------------------------------------------------------------- 走行
 
 		/// 壁・棚と、まだ回収していないブロック
+		/// 自チームの座標とフィールド座標の行き来 (赤なら y について反転する。反転は自分の逆)
+		auto mirror(const Pose2& p) const -> Pose2 { return this->red_ ? Pose2{p.x, -p.y, -p.yaw} : p; }
+
 		auto obstacles() -> Field {
 			Field field{.bounds = this->field_.bounds, .obstacles = this->walls_};
 			const std::scoped_lock lock{this->mutex_};
@@ -494,13 +516,14 @@ namespace {
 			const auto worst = task_commander::sweep_clearance(this->obstacles(), sweep, this->footprint_, this->sweep_step_);
 			if (worst.clearance < this->min_clearance_) {
 				return std::unexpected{std::format("{}: the robot would come within {:.3f} m of an obstacle at ({:.3f}, {:.3f}) (min_clearance {:.3f}); not moving",
-					what, worst.clearance, worst.x, worst.y, this->min_clearance_)};
+					what, worst.clearance, worst.x, this->red_ ? -worst.y : worst.y, this->min_clearance_)};
 			}
 			// 速さの違う区間は分けて走る
 			const auto run = [&](const std::vector<Pose2>& part, const double speed) -> Status {
 				if (part.empty()) return {};
 				FollowPath::Goal goal{};
-				for (const auto& p : part) {
+				for (const auto& q : part) {
+					const auto p = this->mirror(q);   // 自チームの座標 -> フィールド座標
 					goal.x.push_back(p.x);
 					goal.y.push_back(p.y);
 					goal.yaw.push_back(p.yaw);
@@ -542,11 +565,12 @@ namespace {
 				if (this->picked_[static_cast<std::size_t>(block)]) return std::unexpected{std::format("block {} was already picked (call ~/reset if it is back)", block)};
 			}
 			// 回収の姿勢は pick.poses で決める。機体から吸ったノーツの中心へ向かう向きの手前 (pick.standoff) から寄る
-			const auto target = g.pick_poses[static_cast<std::size_t>(block)];
 			const double reach = std::hypot(g.offset_x, g.offset_y);
 			const auto along = [&](const Pose2& p, const double d) {
 				return task_commander::offset_pose(p, d * g.offset_x / reach, d * g.offset_y / reach);
 			};
+			// 赤コートでは、さらに pick.red_extra_reach だけブロックへ寄る
+			const auto target = along(g.pick_poses[static_cast<std::size_t>(block)], this->red_ ? this->pick_red_extra_reach_ : 0.0);
 			const auto standoff = along(target, -this->pick_standoff_);
 
 			this->step(std::format("{}: lift to clear, other lifts to carry", g.name));
@@ -580,9 +604,10 @@ namespace {
 			return this->move({standoff}, "backing off from the notes", this->approach_speed_);
 		}
 
-		/// gripper0 で block、gripper1 で block - 1 を同時に回収する。手順は pick と同じで、昇降と吸引は 2 つ同時に動かす
+		/// block と block - 1 を同時に回収する (青なら gripper0 が block、赤なら gripper1 が block)。手順は pick と同じで、昇降と吸引は 2 つ同時に動かす
 		auto pick_pair(const int block) -> Status {
-			const std::array<int, 2> grippers{0, 1};
+			// 青では gripper0 (左) が block、gripper1 (右) が block - 1 を取る。赤では左右の役が入れ替わる
+			const std::array<int, 2> grippers = this->red_ ? std::array<int, 2>{1, 0} : std::array<int, 2>{0, 1};
 			const std::array<int, 2> blocks{block, block - 1};
 			{
 				const std::scoped_lock lock{this->mutex_};
@@ -592,7 +617,8 @@ namespace {
 					if (this->picked_[static_cast<std::size_t>(blocks[i])]) return std::unexpected{std::format("block {} was already picked (call ~/reset if it is back)", blocks[i])};
 				}
 			}
-			const auto target = this->pick_pairs_.at(block);
+			// 赤コートでは、さらに pick.red_extra_reach だけ前 (ブロックの方) へ寄る
+			const auto target = task_commander::offset_pose(this->pick_pairs_.at(block), this->red_ ? this->pick_red_extra_reach_ : 0.0, 0.0);
 			// 手前は機体の後ろ向きに pick.standoff (2 つの把持機構は機体の前に左右ほぼ対称に並ぶ)
 			const auto standoff = task_commander::offset_pose(target, -this->pick_standoff_, 0.0);
 			const auto lifts = [&](const int index) -> Status {
@@ -640,16 +666,19 @@ namespace {
 			return this->move({standoff}, "backing off from the notes", this->approach_speed_);
 		}
 
-		/// 把持機構 gripper の吸ったノーツが列 column のマスに入る位置と向きへ、マスの手前から進む。昇降と吸引は変えない
+		/// 今の y のまま、把持機構 gripper の吸ったノーツの x を列 column の中心に合わせ、棚の方 (place.yaw) を向く。
+		/// 前後 (棚へ差し込む) と昇降・吸引は変えない (手でする)
 		auto to_shelf_cell(const int gripper, const int column) -> Status {
+			const auto here = this->odom();
+			if (!here) return std::unexpected{"no recent pose estimate"};
 			const auto& g = this->grippers_[static_cast<std::size_t>(gripper)];
-			const auto target = task_commander::pose_for_tool(
-				this->columns_x_[static_cast<std::size_t>(column)], this->shelf_face_y_ - this->place_depth_, this->place_yaw_, g.offset_x, g.offset_y);
-			const double reach = std::hypot(g.offset_x, g.offset_y);
-			const auto standoff = task_commander::offset_pose(target, -this->place_standoff_ * g.offset_x / reach, -this->place_standoff_ * g.offset_y / reach);
-			const auto what = std::format("moving {} into column {}", g.name, column);
+			// 向きが決まれば道具の x は機体の y によらないので、y だけ今の値に置き換える
+			auto target = task_commander::pose_for_tool(
+				this->columns_x_[static_cast<std::size_t>(column)], here->y, this->place_yaw_, g.offset_x, g.offset_y);
+			target.y = here->y;
+			const auto what = std::format("lining {} up with column {}", g.name, column);
 			this->step(what);
-			return this->move({standoff, target}, what, this->approach_speed_);
+			return this->move({target}, what, this->approach_speed_);
 		}
 
 		// ---------------------------------------------------------------- 状態
@@ -689,16 +718,15 @@ namespace {
 		std::vector<double> blocks_x_{};
 		double blocks_y_{};
 		double block_size_{};
+		bool red_{false};
 		Pose2 pick_via_{};
 		std::map<int, Pose2> pick_pairs_{};
 		double pick_standoff_{};
+		double pick_red_extra_reach_{};
 		double grip_time_{};
 		std::vector<double> columns_x_{};
 		int rows_{};
-		double shelf_face_y_{};
-		double place_depth_{};
 		double place_yaw_{};
-		double place_standoff_{};
 		double shelf_center_y_{};
 		Pose2 shelf_front_{};
 		int lift_pick_{};

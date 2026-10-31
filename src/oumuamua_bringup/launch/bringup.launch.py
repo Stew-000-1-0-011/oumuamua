@@ -156,6 +156,7 @@ def generate_launch_description():
             config('oumuamua_bringup', 'field.yaml'),
             config('oumuamua_bringup', 'sotoba_node.yaml'),
             NodeParams('sotoba_node', {
+                'field.team': LaunchConfiguration('team'),
                 'lidar_height': LaunchConfiguration('lidar_z'),
                 'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
                 'lidar_x': LaunchConfiguration('lidar_x'),
@@ -235,6 +236,7 @@ def generate_launch_description():
             config('oumuamua_bringup', 'path_follower.yaml'),
             NodeParams('path_follower', {
                 'path_dir': LaunchConfiguration('path_dir'),
+                'mirror_y': PythonExpression(["'", LaunchConfiguration('team'), "' == 'red'"]),
                 'odom_topic': PythonExpression(
                     ["'/state_estimator/odom' if '", estimator, "' == 'true' else '/tracker_node/odom'"]),
             }),
@@ -317,6 +319,7 @@ def generate_launch_description():
             config('oumuamua_bringup', 'field.yaml'),
             config('oumuamua_bringup', 'task_commander.yaml'),
             NodeParams('task_commander', {
+                'field.team': LaunchConfiguration('team'),
                 'odom_topic': PythonExpression(
                     ["'/state_estimator/odom' if '", estimator, "' == 'true' else '/tracker_node/odom'"]),
             }),
@@ -353,6 +356,7 @@ def generate_launch_description():
             config('oumuamua_bringup', 'sotoba_node.yaml'),
             config('oumuamua_bringup', 'robot_sim.yaml'),
             NodeParams('robot_sim', {
+                'field.team': LaunchConfiguration('team'),
                 'lidar_height': LaunchConfiguration('lidar_z'),
                 'lidar_upside_down': LaunchConfiguration('lidar_upside_down'),
                 'lidar_x': LaunchConfiguration('lidar_x'),
@@ -374,6 +378,9 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'team', default_value='blue', choices=['blue', 'red'],
+            description='自チームの色。blue は +y 側、red は -y 側のコートで走る (自チームの場所・経路を y について反転する)'),
         DeclareLaunchArgument('lidar', default_value='true', description='urg_node2 を起動する'),
         DeclareLaunchArgument(
             'lidar_connection', default_value='ether', choices=['ether', 'serial'],

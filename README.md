@@ -74,6 +74,7 @@ ros2 launch oumuamua_bringup bringup.launch.py
 
 | 引数 | 既定 | 意味 |
 | --- | --- | --- |
+| `team` | `blue` | 自チームの色。`blue` は +y 側、`red` は -y 側のコートで走る。field.yaml の自チームの場所 (start_pose、ノーツ)、task_commander.yaml の場所、経路は青コートの座標で書いてあり、`red` なら各ノードが y について反転して使う (左右の把持機構の役も入れ替わる) |
 | `lidar` | `true` | urg_node2 を起動する (configure -> activate まで自動) |
 | `lidar_connection` | `ether` | `ether` / `serial`。`config/urg_<...>.yaml` を使う。ether は `192.168.0.10` (PC 側は enp2s0 を `192.168.0.15/24` 固定)。serial は `/dev/serial/by-id/usb-Hokuyo_...` を開き、`container/run.sh` はつながっていればこれをコンテナに渡す |
 | `lidar_x` | `-0.28` | base_link から見た LiDAR の取付位置 [m] (static TF `base_link -> laser`)。LiDAR は機体の後ろ側で、車輪 0 の 8 cm 先 |
