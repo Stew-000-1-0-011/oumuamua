@@ -13,4 +13,8 @@ bridge:
     # フィールド (ノーツの数・棚の列と段・壁・棚・スタート位置) は field.yaml (field.*) から読む。
     # bridge.launch.py が field.yaml と、このファイルを読ませる
     robot_radius: 0.32
+    # harite (ロボマス ID 3 の速度だけの昇降)。スマホの手動画面の ▲▼ を押している間、この速さで回す
+    harite_enabled: true    # harite の無い機体では false (操作を出さず、bridge も触らない)
+    harite_speed: 30.0      # [ロータ rad/s] 0..100 (harite.yaml の max_velocity) に丸める
+    harite_reversed: false  # 実機で ▲ が下がるなら true
     completion_setup_files: ["/opt/ros/$ROS_DISTRO/setup.bash"]
